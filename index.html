@@ -1141,8 +1141,12 @@ function renderTerminal(t) {
   const metaDiaria = top > 0 ? top / diasMes : 0;
   let backlog = 0;
   const temContrato = top > 0;
-  if(temContrato && isCurrentMonth && diaD1 >= 1) {
-    for(let d = 1; d <= diaD1; d++) {
+  // Backlog: acumulado incluindo o dia atual (entrada=0 se não carregado)
+  // Para mês atual: loop dia 1 até diaAtual inclusive
+  // Para mês fechado: loop 1 até diasMes
+  const diaLoop = isCurrentMonth ? diaAtual : diasMes;
+  if(temContrato && diaLoop >= 1) {
+    for(let d = 1; d <= diaLoop; d++) {
       const descDia = descMes
         .filter(r => new Date(r.data + 'T12:00:00').getDate() === d)
         .reduce((s, r) => s + r.pesoDst, 0) / 1000;
@@ -1352,47 +1356,66 @@ function renderBarWithLabels(id, labels, data, color, unit) {
 }
 
 function renderTransitoTables(t, today) {
-  const transit = db.transito.filter(r => r.terminal === t);
-  const todayD  = new Date(today + 'T12:00:00');
-  const byDate  = {};
-  transit.forEach(r => {
-    if (!r.prevChegada) return;
-    if (!byDate[r.prevChegada]) byDate[r.prevChegada] = { Sinop:0, 'Nova Mutum':0 };
-    byDate[r.prevChegada][r.filial] = (byDate[r.prevChegada][r.filial] || 0) + r.pesoLiq / 1000;
-  });
-  const pastDays = [today, ...[-1,-2,-3].map(o => { const d=new Date(todayD); d.setDate(d.getDate()+o); return d.toISOString().split('T')[0]; })];
-  const futDays  = [[1,'D+1'],[2,'D+2']].map(([o,l]) => { const d=new Date(todayD); d.setDate(d.getDate()+o); return {date:d.toISOString().split('T')[0],label:l}; });
+  const todayD = new Date(today + 'T12:00:00');
+  const clienteCod = TERMINAL_MAP[t].cod[0];
 
-  function buildRows(dates, labelsArr, bodyId) {
-    let rows='',ts=0,tm=0,tt=0;
-    dates.forEach((date,i) => {
-      const s=byDate[date]?.Sinop||0, m=byDate[date]?.['Nova Mutum']||0, tot=s+m;
+  // ── CARREGAMENTO USINA: vem das DESCARGAS por Data Chegada (D, D-1, D-2, D-3) ──
+  // Agrupa descargas do terminal por data de chegada e filial
+  const descByDate = {};
+  db.descargas.filter(r => r.cliente===clienteCod||r.terminal===t).forEach(r => {
+    if(!r.data) return;
+    if(!descByDate[r.data]) descByDate[r.data] = { Sinop:0, 'Nova Mutum':0 };
+    descByDate[r.data][r.filial] = (descByDate[r.data][r.filial]||0) + r.pesoDst/1000;
+  });
+
+  // ── DATA PREVISTA / ATRASADO: vem do TRÂNSITO ──
+  const transit = db.transito.filter(r => r.terminal === t);
+  const transitByDate = {};
+  transit.forEach(r => {
+    if(!r.prevChegada) return;
+    if(!transitByDate[r.prevChegada]) transitByDate[r.prevChegada] = { Sinop:0, 'Nova Mutum':0 };
+    transitByDate[r.prevChegada][r.filial] = (transitByDate[r.prevChegada][r.filial]||0) + r.pesoLiq/1000;
+  });
+
+  function buildRows(dates, labelsArr, bodyId, sourceObj) {
+    let rows='', ts=0, tm=0, tt=0;
+    dates.forEach((date, i) => {
+      const s = sourceObj[date]?.Sinop||0;
+      const m = sourceObj[date]?.['Nova Mutum']||0;
+      const tot = s+m;
       ts+=s; tm+=m; tt+=tot;
       rows += `<tr class="${i===0?'today':''}"><td>${labelsArr[i]}</td><td>${fmtDate(date)}</td><td>${s?fmt(s):'-'}</td><td>${m?fmt(m):'-'}</td><td>${tot?fmt(tot):'-'}</td></tr>`;
     });
     rows += `<tr><td>Total</td><td></td><td>${ts?fmt(ts):'-'}</td><td>${tm?fmt(tm):'-'}</td><td>${tt?fmt(tt):'-'}</td></tr>`;
     document.getElementById(bodyId).innerHTML = rows;
   }
-  buildRows(pastDays, ['D','D-1','D-2','D-3'], 'tbodyTransitoDesc');
-  buildRows(futDays.map(x=>x.date), futDays.map(x=>x.label), 'tbodyTransitoFut');
 
+  // Carregamento Usina: D, D-1, D-2, D-3 das DESCARGAS
+  const pastDays = [today, ...[-1,-2,-3].map(o=>{const d=new Date(todayD);d.setDate(d.getDate()+o);return d.toISOString().split('T')[0];})];
+  buildRows(pastDays, ['D','D-1','D-2','D-3'], 'tbodyTransitoDesc', descByDate);
+
+  // Data Prevista: D+1, D+2 do TRÂNSITO (prevChegada futura)
+  const futDays = [[1,'D+1'],[2,'D+2']].map(([o,l])=>{const d=new Date(todayD);d.setDate(d.getDate()+o);return{date:d.toISOString().split('T')[0],label:l};});
+  buildRows(futDays.map(x=>x.date), futDays.map(x=>x.label), 'tbodyTransitoFut', transitByDate);
+
+  // Atrasado: TRÂNSITO com prevChegada < hoje
   const atrasados = {};
   transit.forEach(r => {
-    if (!r.prevChegada || r.prevChegada >= today) return;
-    const diff = Math.floor((todayD - new Date(r.prevChegada+'T12:00:00')) / 86400000);
-    const lbl  = diff===1?'D-1':diff===2?'D-2':diff===3?'D-3':'>D-3';
-    if (!atrasados[lbl]) atrasados[lbl] = { Sinop:0, 'Nova Mutum':0, date:r.prevChegada };
-    atrasados[lbl][r.filial] = (atrasados[lbl][r.filial]||0) + r.pesoLiq / 1000;
-    if (r.prevChegada < atrasados[lbl].date) atrasados[lbl].date = r.prevChegada;
+    if(!r.prevChegada || r.prevChegada >= today) return;
+    const diff = Math.floor((todayD - new Date(r.prevChegada+'T12:00:00'))/86400000);
+    const lbl = diff===1?'D-1':diff===2?'D-2':diff===3?'D-3':'>D-3';
+    if(!atrasados[lbl]) atrasados[lbl] = {Sinop:0,'Nova Mutum':0, date:r.prevChegada};
+    atrasados[lbl][r.filial] = (atrasados[lbl][r.filial]||0)+r.pesoLiq/1000;
+    if(r.prevChegada < atrasados[lbl].date) atrasados[lbl].date = r.prevChegada;
   });
   let atRows='', at=[0,0,0];
   ['D-1','D-2','D-3','>D-3'].forEach(l => {
     const a=atrasados[l]||{Sinop:0,'Nova Mutum':0,date:''};
     const s=a.Sinop, m=a['Nova Mutum'], tot=s+m;
     at[0]+=s; at[1]+=m; at[2]+=tot;
-    atRows += `<tr class="${tot>0?'atrasado':''}"><td>${l}</td><td>${fmtDate(a.date)}</td><td>${s?fmt(s):'-'}</td><td>${m?fmt(m):'-'}</td><td>${tot?fmt(tot):'-'}</td></tr>`;
+    atRows+=`<tr class="${tot>0?'atrasado':''}"><td>${l}</td><td>${fmtDate(a.date)}</td><td>${s?fmt(s):'-'}</td><td>${m?fmt(m):'-'}</td><td>${tot?fmt(tot):'-'}</td></tr>`;
   });
-  atRows += `<tr><td>Total</td><td></td><td>${at[0]?fmt(at[0]):'-'}</td><td>${at[1]?fmt(at[1]):'-'}</td><td>${at[2]?fmt(at[2]):'-'}</td></tr>`;
+  atRows+=`<tr><td>Total</td><td></td><td>${at[0]?fmt(at[0]):'-'}</td><td>${at[1]?fmt(at[1]):'-'}</td><td>${at[2]?fmt(at[2]):'-'}</td></tr>`;
   document.getElementById('tbodyAtrasado').innerHTML = atRows;
 }
 
@@ -1461,25 +1484,40 @@ function renderFerrovia() {
   const minimo   = cfg.minimo   || 83933;
   const saldo    = volCarreg - contrato;
 
-  // ── MÉDIA/DIA: usa D-1 como referência (igual ao PDF) ──
-  const media = diaD1 > 0 ? volCarreg / diaD1 : 0;
+  // ── MÉDIA/DIA: baseada nos dias com carregamento ──
+  const diasComDadosFerro = new Set(
+    ferroNotas.filter(r=>r.qtde>0).map(r=>new Date(r.data+'T12:00:00').getDate())
+  ).size;
+  const media = diasComDadosFerro > 0 ? volCarreg / diasComDadosFerro : 0;
 
-  // ── VOLUME PROJETADO: média D-1 × dias do mês ──
-  const projetado = (!isCurrentMonth || diaD1 === 0) ? volCarreg : media * diasMes;
+  // ── VOLUME PROJETADO FERROVIA: acumulado + média × dias_restantes ──
+  const diasRestantesFerro = diasMes - diasComDadosFerro;
+  const projetado = (!isCurrentMonth || diasComDadosFerro === 0 || diasComDadosFerro >= diasMes)
+    ? volCarreg
+    : volCarreg + media * diasRestantesFerro;
 
-  // ── BACKLOG FERROVIA (acumulado dia a dia) ──
+  // ── BACKLOG FERROVIA: acumulado dia a dia incluindo hoje ──
   const metaDiaria = contrato / diasMes;
-  const metaAteD1  = metaDiaria * diaD1;
-  const carregD1   = ferroNotas.filter(r => new Date(r.data+'T12:00:00').getDate() <= diaD1)
-    .reduce((s,r) => s+r.qtde, 0) / 1000;
-  const backlogFerro = isCurrentMonth ? (carregD1 - metaAteD1) : 0;
+  let backlogFerroAcum = 0;
+  const diaLoopFerro = isCurrentMonth ? diaAtual : diasMes;
+  for(let d = 1; d <= diaLoopFerro; d++) {
+    const carregDia = ferroNotas.filter(r => new Date(r.data+'T12:00:00').getDate()===d)
+      .reduce((s,r)=>s+r.qtde,0)/1000;
+    backlogFerroAcum = carregDia - metaDiaria + (d===1 ? 0 : backlogFerroAcum);
+  }
+  const backlogFerro = backlogFerroAcum;
   const backlogFerroColor = backlogFerro >= 0 ? '#1a6b35' : '#b91c1c';
   const backlogFerroLabel = backlogFerro >= 0 ? 'Acima do previsto' : 'Pendência';
 
   const saldoMin   = volCarreg - minimo;
   const metaMinDia = minimo / diasMes;
-  const metaMinD1  = metaMinDia * diaD1;
-  const backlogMin = isCurrentMonth ? (carregD1 - metaMinD1) : 0;
+  let backlogMinAcum = 0;
+  for(let d = 1; d <= diaLoopFerro; d++) {
+    const carregDia = ferroNotas.filter(r => new Date(r.data+'T12:00:00').getDate()===d)
+      .reduce((s,r)=>s+r.qtde,0)/1000;
+    backlogMinAcum = carregDia - metaMinDia + (d===1 ? 0 : backlogMinAcum);
+  }
+  const backlogMin = backlogMinAcum;
 
   // Custo previsto ferrovia: tarifa mês × vol carregado Teciap+Ultra
   const cfgMesFerro   = (db.configHist[curMonth]||{}).ferro || db.config.ferro || {};
