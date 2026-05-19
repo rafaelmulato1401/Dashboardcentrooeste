@@ -1112,19 +1112,21 @@ function renderTerminal(t) {
 
   // ── VOLUME PROJETADO ──
   // Média até D-1, multiplicado pela qtd de dias do mês
-  // Se mês fechado: projetado = recebido
-  // Média até D-1 = total recebido até D-1 / diaD1
-  // Volume projetado = média * dias do mês
-  const descAteD1 = isCurrentMonth && diaD1 > 0 ? descMes.filter(r => {
-    const d = new Date(r.data + 'T12:00:00').getDate();
-    return d <= diaD1;
-  }).reduce((s, r) => s + r.pesoDst, 0) / 1000 : volRecebido;
-  const mediaTerminal = (isCurrentMonth && diaD1 > 0) ? descAteD1 / diaD1 : 0;
+  // Projetado D-1: usa dados até fim do dia anterior
+  // acumD1 = soma descargas dias 1..diaD1
+  // media = acumD1 / dias_com_dados_ate_D1
+  // projetado = acumD1 + media * (diasMes - diaD1)
+  const descFiltD1 = descMes.filter(r => new Date(r.data+'T12:00:00').getDate() <= diaD1);
+  const acumD1Terminal = descFiltD1.reduce((s,r)=>s+r.pesoDst,0)/1000;
+  const diasD1Set = new Set(descFiltD1.map(r=>new Date(r.data+'T12:00:00').getDate()));
+  const mediaTerminal = diasD1Set.size > 0 ? acumD1Terminal / diasD1Set.size : 0;
   let volProjetado;
-  if (!isCurrentMonth || diaD1 === 0) {
-    volProjetado = volRecebido; // mês fechado: projetado = recebido
+  if(!isCurrentMonth || diaD1 <= 0) {
+    volProjetado = volRecebido;
+  } else if(diaD1 >= diasMes) {
+    volProjetado = volRecebido;
   } else {
-    volProjetado = mediaTerminal * diasMes;
+    volProjetado = acumD1Terminal + mediaTerminal * (diasMes - diaD1);
   }
 
   // ── EXPEDIDOS ──
@@ -1141,10 +1143,9 @@ function renderTerminal(t) {
   const metaDiaria = top > 0 ? top / diasMes : 0;
   let backlog = 0;
   const temContrato = top > 0;
-  // Backlog: acumulado incluindo o dia atual (entrada=0 se não carregado)
-  // Para mês atual: loop dia 1 até diaAtual inclusive
-  // Para mês fechado: loop 1 até diasMes
-  const diaLoop = isCurrentMonth ? diaAtual : diasMes;
+  // Backlog: acumulado com corte às 23:59 do dia anterior (D-1)
+  // Loop dias 1 até diaD1 inclusive (hoje - 1)
+  const diaLoop = isCurrentMonth ? diaD1 : diasMes;
   if(temContrato && diaLoop >= 1) {
     for(let d = 1; d <= diaLoop; d++) {
       const descDia = descMes
@@ -1484,22 +1485,25 @@ function renderFerrovia() {
   const minimo   = cfg.minimo   || 83933;
   const saldo    = volCarreg - contrato;
 
-  // ── MÉDIA/DIA: baseada nos dias com carregamento ──
-  const diasComDadosFerro = new Set(
-    ferroNotas.filter(r=>r.qtde>0).map(r=>new Date(r.data+'T12:00:00').getDate())
-  ).size;
-  const media = diasComDadosFerro > 0 ? volCarreg / diasComDadosFerro : 0;
+  // ── MÉDIA/DIA FERROVIA: corte D-1 (dados até fim do dia anterior) ──
+  const ferroNotasD1 = ferroNotas.filter(r => {
+    const d = new Date(r.data+'T12:00:00').getDate();
+    return d <= diaD1;
+  });
+  const acumFerroD1 = ferroNotasD1.reduce((s,r)=>s+r.qtde,0)/1000;
+  const diasComDadosFerro = new Set(ferroNotasD1.filter(r=>r.qtde>0).map(r=>new Date(r.data+'T12:00:00').getDate())).size;
+  const media = diasComDadosFerro > 0 ? acumFerroD1 / diasComDadosFerro : 0;
 
-  // ── VOLUME PROJETADO FERROVIA: acumulado + média × dias_restantes ──
-  const diasRestantesFerro = diasMes - diasComDadosFerro;
-  const projetado = (!isCurrentMonth || diasComDadosFerro === 0 || diasComDadosFerro >= diasMes)
+  // ── VOLUME PROJETADO FERROVIA: acumD1 + média × dias_restantes ──
+  const diasRestantesFerro = diasMes - diaD1;
+  const projetado = (!isCurrentMonth || diaD1 === 0 || diaD1 >= diasMes)
     ? volCarreg
-    : volCarreg + media * diasRestantesFerro;
+    : acumFerroD1 + media * diasRestantesFerro;
 
-  // ── BACKLOG FERROVIA: acumulado dia a dia incluindo hoje ──
+  // ── BACKLOG FERROVIA: corte D-1 (dados até fim do dia anterior) ──
   const metaDiaria = contrato / diasMes;
   let backlogFerroAcum = 0;
-  const diaLoopFerro = isCurrentMonth ? diaAtual : diasMes;
+  const diaLoopFerro = isCurrentMonth ? diaD1 : diasMes;
   for(let d = 1; d <= diaLoopFerro; d++) {
     const carregDia = ferroNotas.filter(r => new Date(r.data+'T12:00:00').getDate()===d)
       .reduce((s,r)=>s+r.qtde,0)/1000;
