@@ -398,44 +398,63 @@
 <div class="page" id="page-config">
   <div class="section-title">Configurações</div>
   <div class="gold-bar"></div>
+
+  <!-- Seletor de Mês de Referência -->
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;padding:14px 18px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;max-width:600px">
+    <div>
+      <div class="field-label" style="margin-bottom:4px">Mês de Referência das Configurações</div>
+      <div style="font-size:11px;color:var(--text2)">Selecione o mês para salvar ou editar as tarifas e contratos</div>
+    </div>
+    <select id="cfg_mes_ref" class="field-input" style="max-width:200px" onchange="renderConfig()">
+    </select>
+    <button class="btn-save" style="white-space:nowrap" onclick="renderConfig()">📂 Carregar</button>
+  </div>
+
   <div class="config-grid">
+    <!-- TECIAP -->
     <div class="config-card">
       <div class="config-card-title"><div class="config-dot" style="background:var(--teciap)"></div>Teciap</div>
       <div class="field-group"><label class="field-label">Take or Pay / Mês (m³)</label><input class="field-input" id="cfg_teciap_top" type="number" placeholder="35000"></div>
       <div class="field-group"><label class="field-label">Estática Contratada — Hidratado (m³)</label><input class="field-input" id="cfg_teciap_estat_hid" type="number" placeholder="6000"></div>
       <div class="field-group"><label class="field-label">Estática Contratada — Anidro (m³)</label><input class="field-input" id="cfg_teciap_estat_ani" type="number" placeholder="1000"></div>
       <div class="field-group"><label class="field-label">Tarifa Terminal (R$/m³)</label><input class="field-input" id="cfg_teciap_tarifa" type="number" step="0.01" placeholder="0.00"></div>
-      <div class="field-group"><label class="field-label">Volume Atual Contratado (m³)</label><input class="field-input" id="cfg_teciap_vol" type="number" placeholder="0"></div>
-      <div class="field-group"><label class="field-label">Valor Atual Contrato (R$)</label><input class="field-input" id="cfg_teciap_valor" type="number" step="0.01" placeholder="0.00"></div>
       <button class="btn-save" onclick="saveConfig('teciap')">Salvar Teciap</button>
     </div>
+    <!-- ULTRACARGO -->
     <div class="config-card">
       <div class="config-card-title"><div class="config-dot" style="background:var(--ultra)"></div>Ultracargo RO</div>
       <div class="field-group"><label class="field-label">Take or Pay / Mês (m³)</label><input class="field-input" id="cfg_ultra_top" type="number" placeholder="25000"></div>
       <div class="field-group"><label class="field-label">Estática Contratada — Hidratado (m³)</label><input class="field-input" id="cfg_ultra_estat_hid" type="number" placeholder="5000"></div>
       <div class="field-group"><label class="field-label">Tarifa Terminal (R$/m³)</label><input class="field-input" id="cfg_ultra_tarifa" type="number" step="0.01" placeholder="0.00"></div>
-      <div class="field-group"><label class="field-label">Volume Atual Contratado (m³)</label><input class="field-input" id="cfg_ultra_vol" type="number" placeholder="0"></div>
-      <div class="field-group"><label class="field-label">Valor Atual Contrato (R$)</label><input class="field-input" id="cfg_ultra_valor" type="number" step="0.01" placeholder="0.00"></div>
       <button class="btn-save" onclick="saveConfig('ultra')">Salvar Ultracargo</button>
     </div>
+    <!-- CENTROESTE -->
     <div class="config-card">
       <div class="config-card-title"><div class="config-dot" style="background:var(--centro)"></div>Centroeste</div>
       <div class="field-group"><label class="field-label">Take or Pay / Mês (m³)</label><input class="field-input" id="cfg_centro_top" type="number" placeholder="0"></div>
       <div class="field-group"><label class="field-label">Estática Contratada — Hidratado (m³)</label><input class="field-input" id="cfg_centro_estat_hid" type="number" placeholder="0"></div>
       <div class="field-group"><label class="field-label">Tarifa Terminal (R$/m³)</label><input class="field-input" id="cfg_centro_tarifa" type="number" step="0.01" placeholder="0.00"></div>
-      <div class="field-group"><label class="field-label">Volume Atual Contratado (m³)</label><input class="field-input" id="cfg_centro_vol" type="number" placeholder="0"></div>
-      <div class="field-group"><label class="field-label">Valor Atual Contrato (R$)</label><input class="field-input" id="cfg_centro_valor" type="number" step="0.01" placeholder="0.00"></div>
       <button class="btn-save" onclick="saveConfig('centro')">Salvar Centroeste</button>
     </div>
+    <!-- FERROVIA -->
     <div class="config-card">
       <div class="config-card-title"><div class="config-dot" style="background:var(--gold)"></div>Ferrovia (Rumo)</div>
-      <div class="field-group"><label class="field-label">Contrato Transporte / Mês (m³)</label><input class="field-input" id="cfg_ferro_contrato" type="number" placeholder="88350"></div>
-      <div class="field-group"><label class="field-label">Mínimo Contratual / Mês (m³)</label><input class="field-input" id="cfg_ferro_minimo" type="number" placeholder="83933"></div>
+      <div class="field-group"><label class="field-label">Contrato Transporte / Mês (m³)</label><input class="field-input" id="cfg_ferro_contrato" type="number" placeholder="88350" oninput="autoMinimoFerro()"></div>
+      <div class="field-group">
+        <label class="field-label">Mínimo Contratual / Mês (m³) <span style="font-size:9px;color:var(--text3)">(contrato − 5%, automático)</span></label>
+        <input class="field-input" id="cfg_ferro_minimo" type="number" placeholder="83933" readonly style="background:var(--bg3);color:var(--text2)">
+      </div>
       <div class="field-group"><label class="field-label">Tarifa Ferrovia (R$/m³)</label><input class="field-input" id="cfg_ferro_tarifa" type="number" step="0.01" placeholder="0.00"></div>
-      <div class="field-group"><label class="field-label">Volume Carregado Mês Atual (m³)</label><input class="field-input" id="cfg_ferro_vol_mes" type="number" placeholder="0"></div>
-      <div class="field-group"><label class="field-label">Valor Pago Mês Atual (R$)</label><input class="field-input" id="cfg_ferro_valor_mes" type="number" step="0.01" placeholder="0.00"></div>
       <button class="btn-save" onclick="saveConfig('ferro')">Salvar Ferrovia</button>
     </div>
+
+    <!-- HISTÓRICO DE CONFIGURAÇÕES -->
+    <div class="config-card" style="grid-column:1/-1">
+      <div class="config-card-title">📋 Histórico de Configurações por Mês</div>
+      <div id="configHistTable" style="overflow-x:auto"></div>
+    </div>
+
+    <!-- PREVISÃO DE CUSTOS -->
     <div class="config-card" style="grid-column:1/-1">
       <div class="config-card-title">💰 Previsão de Custos — Mês Selecionado</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px" id="costPreview"></div>
@@ -552,7 +571,7 @@
 // ============================================================
 // CONSTANTS
 // ============================================================
-const DB_KEYS = { descargas:'op_descargas', transito:'op_transito', notas:'op_notas', estoque:'op_estoque', config:'op_config', produtoMap:'op_produto_map', nfClienteMap:'op_nf_cliente_map' };
+const DB_KEYS = { descargas:'op_descargas', transito:'op_transito', notas:'op_notas', estoque:'op_estoque', config:'op_config', configHist:'op_config_hist', produtoMap:'op_produto_map', nfClienteMap:'op_nf_cliente_map' };
 const TERMINAL_MAP = {
   teciap: {cod:[3490],   dep:[17],          name:'Teciap',        color:'#1a3a6b'},
   ultra:  {cod:[83868],  dep:[0.35,0.34],   name:'Ultracargo RO', color:'#0e6674'},
@@ -565,7 +584,7 @@ const MONTHS_SHORT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out
 // ============================================================
 // STATE
 // ============================================================
-let db = { descargas:[], transito:[], notas:[], estoque:[], config:{}, produtoMap:{}, nfClienteMap:{} };
+let db = { descargas:[], transito:[], notas:[], estoque:[], config:{}, configHist:{}, produtoMap:{}, nfClienteMap:{} };
 let currentTerminal = 'teciap';
 let pendingEstoqueMeta = null; // {produto, data}
 let charts = {};
@@ -595,6 +614,7 @@ async function loadDB() {
     loadKey('descargas',[]), loadKey('transito',[]), loadKey('notas',[]), loadKey('estoque',[]),
   ]);
   db.config       = await loadKey('config',{});
+  db.configHist   = await loadKey('configHist',{});
   db.produtoMap   = await loadKey('produtoMap',{});
   db.nfClienteMap = await loadKey('nfClienteMap',{});
 
@@ -1151,6 +1171,16 @@ function renderTerminal(t) {
 
   // ── KPIs ──
   const semDadosTerminal = descMes.length === 0;
+  // Custo previsto: tarifa do mês × vol recebido
+  const cfgMesTerminal = (db.configHist[curMonth]||{})[t] || db.config[t] || {};
+  const tarifaTerminal = cfgMesTerminal.tarifa || 0;
+  const custoTerminal  = tarifaTerminal * volRecebido;
+  const custoCardTerminal = tarifaTerminal > 0 ? `
+    <div class="kpi" style="--kpi-color:#7a5200;grid-column:span 1">
+      <div class="kpi-label">Previsão Custo Mês</div>
+      <div class="kpi-value" style="font-size:20px">R$ ${custoTerminal.toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0})}</div>
+      <div class="kpi-sub">${fmt(volRecebido)} m³ × R$ ${tarifaTerminal.toFixed(2)}/m³</div>
+    </div>` : '';
   const backlogColor  = semDadosTerminal ? '#9aa3bb' : (backlog >= 0 ? '#1a6b35' : '#b91c1c');
   const backlogClass  = (!semDadosTerminal && backlog < 0) ? 'negative' : '';
   const backlogLabel  = semDadosTerminal ? 'Sem dados' : (backlog >= 0 ? 'Acima do previsto' : 'Pendência');
@@ -1170,6 +1200,7 @@ function renderTerminal(t) {
     <div class="kpi" style="--kpi-color:${color}"><div class="kpi-label">Estoque Atual Hidratado</div><div class="kpi-value">${fmt(estoqueAtualHid)}</div><div class="kpi-sub">m³</div></div>
     <div class="kpi" style="--kpi-color:#1a6b35"><div class="kpi-label">Estoque Atual Anidro</div><div class="kpi-value">${fmt(estoqueAtualAni)}</div><div class="kpi-sub">m³</div></div>
     <div class="kpi" style="--kpi-color:#f0a500"><div class="kpi-label">Giro (×Estática)</div><div class="kpi-value">${giro.toFixed(2)}×</div><div class="kpi-sub">vezes a estática recebida</div></div>
+    ${custoCardTerminal}
   `;
 
   // ── GRÁFICOS ──
@@ -1450,6 +1481,17 @@ function renderFerrovia() {
   const metaMinD1  = metaMinDia * diaD1;
   const backlogMin = isCurrentMonth ? (carregD1 - metaMinD1) : 0;
 
+  // Custo previsto ferrovia: tarifa mês × vol carregado Teciap+Ultra
+  const cfgMesFerro   = (db.configHist[curMonth]||{}).ferro || db.config.ferro || {};
+  const tarifaFerro   = cfgMesFerro.tarifa || 0;
+  const custoFerroVal = tarifaFerro * volCarreg;
+  const custoCardFerro = tarifaFerro > 0 ? `
+    <div class="kpi" style="--kpi-color:#7a5200;grid-column:span 1">
+      <div class="kpi-label">Previsão Custo Ferrovia</div>
+      <div class="kpi-value" style="font-size:20px">R$ ${custoFerroVal.toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0})}</div>
+      <div class="kpi-sub">${fmt(volCarreg)} m³ × R$ ${tarifaFerro.toFixed(2)}/m³</div>
+    </div>` : '';
+
   // Sem dados: backlog e saldo só fazem sentido com dados carregados
   const semDados = ferroNotas.length === 0;
   const backlogFerroDisplay = semDados ? 0 : Math.abs(backlogFerro);
@@ -1476,6 +1518,7 @@ function renderFerrovia() {
     <div class="kpi" style="--kpi-color:#f0a500"><div class="kpi-label">Volume Mínimo Rumo</div><div class="kpi-value">${fmt(minimo)}</div><div class="kpi-sub">m³/mês</div></div>
     <div class="kpi" style="--kpi-color:${saldoMinColor}"><div class="kpi-label">Saldo Volume Mínimo</div><div class="kpi-value ${saldoMinClass}">${saldoMinDisplay}</div><div class="kpi-sub">m³</div></div>
     <div class="kpi" style="--kpi-color:${backlogMinKpiColor}"><div class="kpi-label">Backlog Mín. Rumo</div><div class="kpi-value">${fmt(backlogMinDisplay)}</div><div class="kpi-sub">${backlogMinSubLabel}</div></div>
+    ${custoCardFerro}
   `;
 
   const days   = Array.from({length:diasMes},(_,i)=>i+1);
@@ -1585,14 +1628,25 @@ function renderTakeOrPay(){
     const pad=String(m+1).padStart(2,'0');
     return notas.filter(r=>r.data&&r.data.startsWith(`${curYear}-${pad}`)).reduce((s,r)=>s+r.qtde,0)/1000;
   };
-  const minByMonth=[60183,83933,83933,83933,83933,107683,107683,107683,107683,107683,131433,131433];
-  const conByMonth=[63350,88350,88350,88350,88350,113350,113350,113350,113350,113350,138350,138350];
+  // Pega contrato/mínimo do configHist por mês, fallback para valores padrão
+  const curYear = parseInt(getCurMonth().split('-')[0]);
+  const getContratoMes = (m) => {
+    const mesKey = curYear+'-'+String(m+1).padStart(2,'0');
+    return (db.configHist[mesKey]?.ferro?.contrato) || 88350;
+  };
+  const getMinimoMes = (m) => {
+    const mesKey = curYear+'-'+String(m+1).padStart(2,'0');
+    const cfg = db.configHist[mesKey]?.ferro;
+    if(cfg?.minimo) return cfg.minimo;
+    if(cfg?.contrato) return Math.round(cfg.contrato*0.95);
+    return 83933;
+  };
   const curM=parseInt(getCurMonth().split('-')[1])-1;
 
   function buildTopTable(months,bodyId){
     let html='',tf=0,tMin=0,tCon=0;
     months.forEach(m=>{
-      const fat=monthlyVol(m),mn=minByMonth[m],cn=conByMonth[m];
+      const fat=monthlyVol(m),mn=getMinimoMes(m),cn=getContratoMes(m);
       const im=mn?Math.round(fat/mn*100):0, ic=cn?Math.round(fat/cn*100):0;
       tf+=fat;tMin+=mn;tCon+=cn;
       const pc=im>=100?'pct-good':im>=80?'pct-warn':'pct-bad';
@@ -1615,47 +1669,164 @@ function renderTakeOrPay(){
 // ============================================================
 // RENDER CONFIG
 // ============================================================
-function saveConfig(t){
-  if(!db.config[t]) db.config[t]={};
-  ['top','estat_hid','estat_ani','tarifa','vol','valor','contrato','minimo','vol_mes','valor_mes'].forEach(f=>{
-    const el=document.getElementById(`cfg_${t}_${f}`);
-    if(el) db.config[t][f]=parseFloat(el.value)||0;
+function autoMinimoFerro() {
+  const contrato = parseFloat(document.getElementById('cfg_ferro_contrato')?.value) || 0;
+  const minimo = Math.round(contrato * 0.95);
+  const el = document.getElementById('cfg_ferro_minimo');
+  if(el) el.value = minimo || '';
+}
+
+function getCfgMes() {
+  const sel = document.getElementById('cfg_mes_ref');
+  return sel ? sel.value : getCurMonth();
+}
+
+function saveConfig(t) {
+  const mes = getCfgMes();
+  if(!mes) { alert('Selecione o mês de referência!'); return; }
+  if(!db.configHist[mes]) db.configHist[mes] = {};
+  if(!db.configHist[mes][t]) db.configHist[mes][t] = {};
+
+  const fields = t === 'ferro'
+    ? ['contrato','minimo','tarifa']
+    : ['top','estat_hid','estat_ani','tarifa'];
+
+  fields.forEach(f => {
+    const el = document.getElementById(`cfg_${t}_${f}`);
+    if(el) db.configHist[mes][t][f] = parseFloat(el.value) || 0;
   });
+
+  // Auto-calcula mínimo ferrovia
+  if(t === 'ferro') {
+    const contrato = db.configHist[mes].ferro?.contrato || 0;
+    db.configHist[mes].ferro.minimo = Math.round(contrato * 0.95);
+  }
+
+  // Mantém db.config sincronizado com o mês atual para os KPIs
+  if(!db.config[t]) db.config[t] = {};
+  Object.assign(db.config[t], db.configHist[mes][t]);
+
+  saveDB('configHist').catch(()=>{});
   saveDB('config').catch(()=>{});
   renderConfig();
-  alert('✅ Configurações salvas!');
+  alert(`✅ Configurações de ${mes} salvas!`);
 }
-function renderConfig(){
-  ['teciap','ultra','centro','ferro'].forEach(t=>{
-    const cfg=db.config[t]||{};
-    ['top','estat_hid','estat_ani','tarifa','vol','valor','contrato','minimo','vol_mes','valor_mes'].forEach(f=>{
-      const el=document.getElementById(`cfg_${t}_${f}`);
-      if(el&&cfg[f]!=null) el.value=cfg[f];
+function buildMesRefSelect() {
+  const sel = document.getElementById('cfg_mes_ref');
+  if(!sel) return;
+  const cur = getCurMonth();
+  // Gera últimos 12 meses + próximos 3
+  const opts = [];
+  const base = new Date();
+  for(let i = -2; i <= 12; i++) {
+    const d = new Date(base.getFullYear(), base.getMonth() - i, 1);
+    const val = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+    opts.push(val);
+  }
+  const unique = [...new Set(Object.keys(db.configHist).concat(opts))].sort().reverse();
+  sel.innerHTML = unique.map(m => {
+    const [y,mo] = m.split('-');
+    return `<option value="${m}" ${m===cur?'selected':''}>${MONTHS[parseInt(mo)-1]} / ${y}</option>`;
+  }).join('');
+}
+
+function renderConfig() {
+  buildMesRefSelect();
+  const mes = getCfgMes();
+  const cfgMes = db.configHist[mes] || {};
+
+  // Preencher campos com dados do mês selecionado
+  ['teciap','ultra','centro'].forEach(t => {
+    const cfg = cfgMes[t] || db.config[t] || {};
+    ['top','estat_hid','estat_ani','tarifa'].forEach(f => {
+      const el = document.getElementById(`cfg_${t}_${f}`);
+      if(el && cfg[f] != null) el.value = cfg[f]; else if(el) el.value = '';
     });
   });
-  const terms=['teciap','ultra','centro'];
-  let html='';
-  terms.forEach(t=>{
-    const cfg=db.config[t]||{};
-    const vol=cfg.vol||0,tarifa=cfg.tarifa||0,custo=vol*tarifa,valor=cfg.valor||0;
-    html+=`<div class="config-preview">
+  const cfgF = cfgMes.ferro || db.config.ferro || {};
+  ['contrato','tarifa'].forEach(f => {
+    const el = document.getElementById(`cfg_ferro_${f}`);
+    if(el && cfgF[f] != null) el.value = cfgF[f]; else if(el) el.value = '';
+  });
+  // Mínimo automático
+  const minimoEl = document.getElementById('cfg_ferro_minimo');
+  if(minimoEl) minimoEl.value = cfgF.minimo || Math.round((cfgF.contrato||0)*0.95) || '';
+
+  // Tabela histórico
+  renderConfigHistTable();
+
+  // Previsão de custos (mês atual dos dados)
+  const curMonth = getCurMonth();
+  const cfgAtual = db.configHist[curMonth] || db.config;
+  let html = '';
+  ['teciap','ultra','centro'].forEach(t => {
+    const cfg = (db.configHist[curMonth]||{})[t] || db.config[t] || {};
+    const tarifa = cfg.tarifa || 0;
+    // Vol recebido no mês atual
+    const clienteCod = TERMINAL_MAP[t].cod[0];
+    const descMesAtual = db.descargas.filter(r => (r.cliente===clienteCod||r.terminal===t) && r.data && r.data.startsWith(curMonth));
+    const volRecebido = descMesAtual.reduce((s,r)=>s+r.pesoDst,0)/1000;
+    const custo = tarifa * volRecebido;
+    html += `<div class="config-preview">
       <div class="preview-row"><span class="preview-label">${TERMINAL_MAP[t].name}</span></div>
-      <div class="preview-row"><span class="preview-label">Volume Contratado</span><span class="preview-value">${fmt(vol)} m³</span></div>
-      <div class="preview-row"><span class="preview-label">Tarifa</span><span class="preview-value">R$ ${(tarifa).toFixed(2)}/m³</span></div>
+      <div class="preview-row"><span class="preview-label">Vol. Recebido</span><span class="preview-value">${fmt(volRecebido)} m³</span></div>
+      <div class="preview-row"><span class="preview-label">Tarifa (${curMonth})</span><span class="preview-value">R$ ${tarifa.toFixed(2)}/m³</span></div>
       <div class="preview-row"><span class="preview-label">Previsão Custo</span><span class="preview-value cost">R$ ${custo.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
-      <div class="preview-row"><span class="preview-label">Valor Atual Contrato</span><span class="preview-value cost">R$ ${valor.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
     </div>`;
   });
-  const cfgF=db.config.ferro||{};
-  const custoF=(cfgF.vol_mes||0)*(cfgF.tarifa||0);
-  html+=`<div class="config-preview">
+  // Ferrovia
+  const cfgFerroAtual = (db.configHist[curMonth]||{}).ferro || db.config.ferro || {};
+  const tarifaFerro = cfgFerroAtual.tarifa || 0;
+  const ferroNotas = db.notas.filter(r=>r.modal==='Ferroviário'&&(r.terminal==='teciap'||r.terminal==='ultra')&&r.data&&r.data.startsWith(curMonth));
+  const volCarreg = ferroNotas.reduce((s,r)=>s+r.qtde,0)/1000;
+  const custoFerro = tarifaFerro * volCarreg;
+  html += `<div class="config-preview">
     <div class="preview-row"><span class="preview-label">Ferrovia (Rumo)</span></div>
-    <div class="preview-row"><span class="preview-label">Vol. Carregado Mês</span><span class="preview-value">${fmt(cfgF.vol_mes||0)} m³</span></div>
-    <div class="preview-row"><span class="preview-label">Tarifa</span><span class="preview-value">R$ ${(cfgF.tarifa||0).toFixed(2)}/m³</span></div>
-    <div class="preview-row"><span class="preview-label">Previsão Custo</span><span class="preview-value cost">R$ ${custoF.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
-    <div class="preview-row"><span class="preview-label">Valor Pago Mês</span><span class="preview-value cost">R$ ${(cfgF.valor_mes||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
+    <div class="preview-row"><span class="preview-label">Vol. Carregado</span><span class="preview-value">${fmt(volCarreg)} m³</span></div>
+    <div class="preview-row"><span class="preview-label">Tarifa (${curMonth})</span><span class="preview-value">R$ ${tarifaFerro.toFixed(2)}/m³</span></div>
+    <div class="preview-row"><span class="preview-label">Previsão Custo</span><span class="preview-value cost">R$ ${custoFerro.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
   </div>`;
-  document.getElementById('costPreview').innerHTML=html;
+  document.getElementById('costPreview').innerHTML = html;
+}
+
+function renderConfigHistTable() {
+  const meses = Object.keys(db.configHist).sort().reverse();
+  if(!meses.length) { document.getElementById('configHistTable').innerHTML = '<p style="color:var(--text3);font-size:12px;padding:8px">Nenhuma configuração salva ainda.</p>'; return; }
+  const terms = ['teciap','ultra','centro','ferro'];
+  const termNames = {teciap:'Teciap', ultra:'Ultracargo', centro:'Centroeste', ferro:'Ferrovia'};
+  let html = '<table class="mini-table" style="font-size:11px"><thead><tr><th>Mês</th><th>Terminal</th><th>Take or Pay</th><th>Est. Hid.</th><th>Est. Ani.</th><th>Contrato</th><th>Mínimo</th><th>Tarifa</th><th></th></tr></thead><tbody>';
+  meses.forEach(mes => {
+    const [y,mo] = mes.split('-');
+    const mesLabel = MONTHS[parseInt(mo)-1]+'/'+y;
+    terms.forEach(t => {
+      const cfg = db.configHist[mes]?.[t];
+      if(!cfg) return;
+      const isTerminal = t !== 'ferro';
+      html += `<tr>
+        <td>${mesLabel}</td>
+        <td>${termNames[t]}</td>
+        <td>${isTerminal ? fmt(cfg.top||0) : '-'}</td>
+        <td>${isTerminal ? fmt(cfg.estat_hid||0) : '-'}</td>
+        <td>${isTerminal && t==='teciap' ? fmt(cfg.estat_ani||0) : '-'}</td>
+        <td>${!isTerminal ? fmt(cfg.contrato||0) : '-'}</td>
+        <td>${!isTerminal ? fmt(cfg.minimo||0) : '-'}</td>
+        <td>R$ ${(cfg.tarifa||0).toFixed(2)}</td>
+        <td><button onclick="editConfigMes('${mes}','${t}')" style="background:var(--blue);color:#fff;border:none;padding:3px 8px;border-radius:4px;font-size:10px;cursor:pointer">✏️</button></td>
+      </tr>`;
+    });
+  });
+  html += '</tbody></table>';
+  document.getElementById('configHistTable').innerHTML = html;
+}
+
+function editConfigMes(mes, t) {
+  // Seleciona o mês e terminal no formulário
+  const sel = document.getElementById('cfg_mes_ref');
+  if(sel) sel.value = mes;
+  renderConfig();
+  // Scroll para o card do terminal
+  const card = document.querySelector(`[onclick="saveConfig('${t}')"]`);
+  if(card) card.closest('.config-card').scrollIntoView({behavior:'smooth', block:'center'});
 }
 
 // ============================================================
