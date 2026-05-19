@@ -864,7 +864,16 @@ function processFile(file, type) {
 // PROCESS DESCARGAS — FIX: parseExcelDate robusto
 // ============================================================
 function processDescargas(rows) {
-  const hdr = rows[1] || rows[0];
+  let hdr = null, dataStart = 2;
+  for(let hi = 0; hi < Math.min(5, rows.length); hi++) {
+    const row = rows[hi];
+    if(!row || !Array.isArray(row)) continue;
+    const rowStr = row.map(v=>String(v||'')).join(',');
+    if(rowStr.includes('Nº Nota') || rowStr.includes('Nr. Nota') || rowStr.includes('Cliente')) {
+      hdr = row; dataStart = hi + 1; break;
+    }
+  }
+  if(!hdr) return {added:0,skipped:0};
   const cols = {}; hdr.forEach((c,i)=>{ if(c) cols[String(c).trim()]=i; });
   const gIdx=cols['G']??0, clienteIdx=cols['Cliente'], nfIdx=cols['Nº Nota'], fIdx=cols['F'];
   const pesoLiqIdx=cols['Peso Líquido'], pesoDstIdx=cols['Peso Destino'];
@@ -876,7 +885,7 @@ function processDescargas(rows) {
   const allProcess  = [...allCods, ...rumoClients];
   let added=0, skipped=0;
   const existing = new Set(db.descargas.map(r=>r.nf+'_'+r.cliente));
-  for(let i=2;i<rows.length;i++){
+  for(let i=dataStart;i<rows.length;i++){
     const r=rows[i];
     // FIX: verificar mescla — linha de mescla tem G vazio ou não numérico
     const gRaw = r[gIdx];
@@ -923,7 +932,14 @@ function processDescargas(rows) {
 // PROCESS TRANSITO — FIX: verificação de chegada robusta
 // ============================================================
 function processTransito(rows) {
-  const hdr=rows[1]||rows[0];
+  let hdr=null, dataStartTrans=2;
+  for(let hi=0;hi<Math.min(5,rows.length);hi++){
+    const row=rows[hi];
+    if(!row||!Array.isArray(row)) continue;
+    const rs=row.map(v=>String(v||'')).join(',');
+    if(rs.includes('Nº Nota')||rs.includes('Nr. Nota')||rs.includes('Cliente')){hdr=row;dataStartTrans=hi+1;break;}
+  }
+  if(!hdr) return {added:0,skipped:0};
   const cols={}; hdr.forEach((c,i)=>{if(c)cols[String(c).trim()]=i;});
   const gIdx=cols['G']??0, fIdx=cols['F'], nfIdx=cols['Nº Nota'], clienteIdx=cols['Cliente'];
   const emissaoIdx=cols['Dt. Emissão'], pesoLiqIdx=cols['Peso Líquido'], chegadaIdx=cols['Data Chegada'];
@@ -933,7 +949,7 @@ function processTransito(rows) {
   const allProcess  = [...allCods, ...rumoClients];
   let added=0,skipped=0;
   const existing=new Set(db.transito.map(r=>r.nf));
-  for(let i=2;i<rows.length;i++){
+  for(let i=dataStartTrans;i<rows.length;i++){
     const r=rows[i];
     const gRaw=r[gIdx];
     if(gRaw===undefined||gRaw===null||gRaw==='') continue;
@@ -965,8 +981,20 @@ function processTransito(rows) {
 // PROCESS NOTAS — FIX: depósito como float/string
 // ============================================================
 function processNotas(rows) {
-  const hdr=rows[1]||rows[0];
-  const cols={}; hdr.forEach((c,i)=>{if(c)cols[String(c).trim()]=i;});
+  // Detectar linha de header automaticamente: procura a linha que contém 'GEF' ou 'Nr. NF'
+  let hdr = null, dataStartRow = 2;
+  for(let hi = 0; hi < Math.min(5, rows.length); hi++) {
+    const row = rows[hi];
+    if(!row || !Array.isArray(row)) continue;
+    const rowStr = row.map(v=>String(v||'')).join(',');
+    if(rowStr.includes('GEF') || rowStr.includes('Nr. NF') || rowStr.includes('Nº Nota')) {
+      hdr = row;
+      dataStartRow = hi + 1;
+      break;
+    }
+  }
+  if(!hdr) { return {added:0,skipped:0}; }
+  const cols={}; hdr.forEach((c,i)=>{if(c!=null&&c!=='')cols[String(c).trim()]=i;});
   const gefIdx=cols['GEF'], nfIdx=cols['Nr. NF'], emissaoIdx=cols['Data Emissão'];
   const rotIdx=cols['Nome Rotina'], transpIdx=cols['Razão Transportadora'];
   const placaIdx=cols['Placas'], clienteNomeIdx=cols['Nome Cliente'];
@@ -975,7 +1003,7 @@ function processNotas(rows) {
   const depMap={'17':'teciap','0.21':'centro','0.07':'centro','0.35':'ultra','0.34':'ultra'};
   let added=0,skipped=0;
   const existing=new Set(db.notas.map(r=>r.nf));
-  for(let i=2;i<rows.length;i++){
+  for(let i=dataStartRow;i<rows.length;i++){
     const r=rows[i];
     const depRaw=r[depIdx];
     const dep=parseFloat(String(depRaw||'0').replace(',','.'));
@@ -1762,10 +1790,12 @@ function buildMesRefSelect() {
   const sel = document.getElementById('cfg_mes_ref');
   if(!sel) return;
   const cur = getCurMonth();
-  // Gera últimos 12 meses + próximos 3
+  // Preservar seleção atual antes de reconstruir
+  const currentSelected = sel.value || cur;
+  // Gera últimos 24 meses + próximos 3
   const opts = [];
   const base = new Date();
-  for(let i = -2; i <= 12; i++) {
+  for(let i = -2; i <= 24; i++) {
     const d = new Date(base.getFullYear(), base.getMonth() - i, 1);
     const val = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
     opts.push(val);
@@ -1773,12 +1803,20 @@ function buildMesRefSelect() {
   const unique = [...new Set(Object.keys(db.configHist).concat(opts))].sort().reverse();
   sel.innerHTML = unique.map(m => {
     const [y,mo] = m.split('-');
-    return `<option value="${m}" ${m===cur?'selected':''}>${MONTHS[parseInt(mo)-1]} / ${y}</option>`;
+    // Manter a seleção atual (não resetar para o mês corrente)
+    return `<option value="${m}" ${m===currentSelected?'selected':''}>${MONTHS[parseInt(mo)-1]} / ${y}</option>`;
   }).join('');
 }
 
 function renderConfig() {
+  // Salvar seleção atual antes de reconstruir o select
+  const selBefore = document.getElementById('cfg_mes_ref')?.value;
   buildMesRefSelect();
+  // Restaurar seleção se foi perdida
+  const selEl = document.getElementById('cfg_mes_ref');
+  if(selBefore && selEl && selEl.querySelector(`option[value="${selBefore}"]`)) {
+    selEl.value = selBefore;
+  }
   const mes = getCfgMes();
   const cfgMes = db.configHist[mes] || {};
 
