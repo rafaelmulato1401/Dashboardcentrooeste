@@ -1896,12 +1896,35 @@ function renderLog(type,data,fn){
 // ============================================================
 // CLEAR DATA
 // ============================================================
+async function deleteFromFirestore(keys) {
+  if(!window.db_fire || !window.EMPRESA_ID) return;
+  try {
+    const base = db_fire.collection('empresas').doc(EMPRESA_ID).collection('dados');
+    await Promise.all(keys.map(k => base.doc(k).delete()));
+  } catch(e) {
+    console.warn('Erro ao apagar do Firestore:', e.message);
+  }
+}
+
 async function clearData(type) {
   const labels = {descargas:'Descargas',transito:'Trânsito',notas:'Notas Fiscais',estoque:'Estoque'};
   if(!confirm(`⚠️ Tem certeza que deseja apagar todos os dados de ${labels[type]}?\nEsta ação não pode ser desfeita.`)) return;
+
+  // Apaga do Firestore primeiro
+  const keysToDelete = [type];
+  if(type==='notas') keysToDelete.push('produtoMap','nfClienteMap');
+  setStatus(type,'info','⏳ Apagando dados...');
+  await deleteFromFirestore(keysToDelete);
+
+  // Apaga localmente
   db[type] = [];
-  await saveDB(type);
-  if(type==='notas') { db.produtoMap={}; db.nfClienteMap={}; await saveDB('produtoMap'); await saveDB('nfClienteMap'); }
+  localStorage.removeItem(DB_KEYS[type]);
+  if(type==='notas') {
+    db.produtoMap={}; db.nfClienteMap={};
+    localStorage.removeItem(DB_KEYS.produtoMap);
+    localStorage.removeItem(DB_KEYS.nfClienteMap);
+  }
+
   buildMonthFilter();
   renderLogs();
   setStatus(type,'info',`🗑️ Dados de ${labels[type]} apagados com sucesso.`);
@@ -1910,21 +1933,30 @@ async function clearData(type) {
 
 async function clearAllData() {
   if(!confirm('⚠️ Tem certeza que deseja apagar TODOS os dados lançados?\nDescargas, Trânsito, Notas e Estoque serão removidos.\nEsta ação não pode ser desfeita.')) return;
-  ['descargas','transito','notas','estoque'].forEach(k => {
-    db[k] = [];
-    localStorage.removeItem(DB_KEYS[k]);
-  });
-  db.produtoMap = {};
-  localStorage.removeItem(DB_KEYS.produtoMap);
-  db.nfClienteMap = {};
-  localStorage.removeItem(DB_KEYS.nfClienteMap);
+
+  // Mostra progresso
+  document.getElementById('lastUpdate').textContent = '⏳ Apagando...';
+
+  // Apaga do Firestore (fonte principal)
+  await deleteFromFirestore([
+    'descargas','transito','notas','estoque',
+    'produtoMap','nfClienteMap','configHist','_meta'
+  ]);
+
+  // Apaga do localStorage (cache)
+  Object.values(DB_KEYS).forEach(k => localStorage.removeItem(k));
   localStorage.removeItem('op_lastupdate');
+
+  // Limpa memória
+  db.descargas=[]; db.transito=[]; db.notas=[]; db.estoque=[];
+  db.produtoMap={}; db.nfClienteMap={};
+
   document.getElementById('lastUpdate').textContent = '—';
   buildMonthFilter();
   renderLogs();
   ['descargas','transito','notas','estoque'].forEach(k => setStatus(k,'',''));
   if(document.getElementById('page-terminals').classList.contains('active')) renderTerminal(currentTerminal);
-  alert('✅ Todos os dados foram apagados.');
+  alert('✅ Todos os dados foram apagados do servidor e do cache local.');
 }
 
 // ============================================================
