@@ -249,27 +249,6 @@
   @keyframes fadeIn { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:none} }
 </style>
 
-    <!-- ═══════════════════════════════════════════════
-         FIREBASE CONFIG — substitua pelos seus dados
-         Console: https://console.firebase.google.com
-    ═══════════════════════════════════════════════ -->
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-    <script>
-      const firebaseConfig = {
-  apiKey: "AIzaSyARPyuw6LbVj51mDgT4XfHJ1W6wNrFrON8",
-  authDomain: "dashboardcentrooeste.firebaseapp.com",
-  projectId: "dashboardcentrooeste",
-  storageBucket: "dashboardcentrooeste.firebasestorage.app",
-  messagingSenderId: "702556918719",
-  appId: "1:702556918719:web:3823e5b5772c061e9c470a"
-};
-      const EMPRESA_ID = "inpasa"; // identificador da empresa no Firestore
-      firebase.initializeApp(FIREBASE_CONFIG);
-      const db_fire = firebase.firestore();
-      const auth    = firebase.auth();
-    </script>
 </head>
 <body>
 
@@ -595,16 +574,18 @@ let selectedMonth = null; // null = mês atual, 'YYYY-MM' = mês filtrado
 // DB
 // ============================================================
 async function loadDB() {
-  const base = db_fire.collection('empresas').doc(EMPRESA_ID);
-
   async function loadKey(key, defaultVal) {
-    try {
-      const snap = await base.collection('dados').doc(key).get();
-      if(snap.exists) {
-        const d = snap.data();
-        return d.value || defaultVal;
-      }
-    } catch(e) { console.warn('Firestore offline, usando localStorage:', e.message); }
+    // Tenta Firestore primeiro, cai no localStorage se offline ou não configurado
+    if(window.db_fire) {
+      try {
+        const snap = await db_fire.collection('empresas').doc(EMPRESA_ID).collection('dados').doc(key).get();
+        if(snap.exists) {
+          const val = snap.data().value || defaultVal;
+          localStorage.setItem(DB_KEYS[key]||('op_'+key), JSON.stringify(val));
+          return val;
+        }
+      } catch(e) { console.warn('Firestore read error:', e.message); }
+    }
     try { return JSON.parse(localStorage.getItem(DB_KEYS[key]||('op_'+key)) || JSON.stringify(defaultVal)); }
     catch(e) { return defaultVal; }
   }
@@ -621,29 +602,29 @@ async function loadDB() {
     if(Object.keys(db.nfClienteMap).length>0) saveDB('nfClienteMap');
   }
 
-  try {
-    const meta = await base.collection('dados').doc('_meta').get();
-    if(meta.exists){ const lu=meta.data().lastUpdate||''; if(lu) document.getElementById('lastUpdate').textContent=lu; }
-  } catch(e) {
-    const lu=localStorage.getItem('op_lastupdate');
-    if(lu) document.getElementById('lastUpdate').textContent=lu;
+  if(window.db_fire) {
+    try {
+      const meta = await db_fire.collection('empresas').doc(EMPRESA_ID).collection('dados').doc('_meta').get();
+      if(meta.exists){ const lu=meta.data().lastUpdate||''; if(lu){ document.getElementById('lastUpdate').textContent=lu; localStorage.setItem('op_lastupdate',lu); }}
+    } catch(e) {}
   }
+  const lu=localStorage.getItem('op_lastupdate');
+  if(lu) document.getElementById('lastUpdate').textContent=lu;
 }
 async async function saveDB(key) {
   const value = db[key];
+  // Sempre salva no localStorage como cache
   if(DB_KEYS[key]) localStorage.setItem(DB_KEYS[key], JSON.stringify(value));
-  try {
-    const base = db_fire.collection('empresas').doc(EMPRESA_ID);
-    await base.collection('dados').doc(key).set({value, updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
-    const now = new Date().toLocaleString('pt-BR');
-    await base.collection('dados').doc('_meta').set({lastUpdate:now},{merge:true});
-    localStorage.setItem('op_lastupdate',now);
-    document.getElementById('lastUpdate').textContent=now;
-  } catch(e) {
-    console.warn('Offline — salvo localmente:', e.message);
-    const now=new Date().toLocaleString('pt-BR');
-    localStorage.setItem('op_lastupdate',now);
-    document.getElementById('lastUpdate').textContent=now;
+  const now = new Date().toLocaleString('pt-BR');
+  localStorage.setItem('op_lastupdate', now);
+  document.getElementById('lastUpdate').textContent = now;
+  // Salva no Firestore se configurado
+  if(window.db_fire) {
+    try {
+      const base = db_fire.collection('empresas').doc(EMPRESA_ID);
+      await base.collection('dados').doc(key).set({value, updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+      await base.collection('dados').doc('_meta').set({lastUpdate:now},{merge:true});
+    } catch(e) { console.warn('Firestore write error (salvo localmente):', e.message); }
   }
 }
 
@@ -1735,12 +1716,60 @@ function fmt(v){if(v==null||isNaN(v)||v===0)return v===0?'0':'-';return v.toLoca
 function fmtDate(d){if(!d)return '-';const p=d.split('-');return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:d;}
 
 // ============================================================
-// INIT
+// INIT — Firebase + App Start
 // ============================================================
-document.addEventListener('DOMContentLoaded', async () => {
-  await loadDB();
-  document.getElementById('monthFilterBar').style.display='flex';
-});
+(function initApp() {
+  // ── Firebase Config — SUBSTITUA pelos valores do seu projeto Firebase ──
+  // Console: https://console.firebase.google.com → Configurações → Seus apps → Web
+  const FIREBASE_CONFIG = {
+    apiKey:            "AIzaSyARPyuw6LbVj51mDgT4XfHJ1W6wNrFrON8",
+    authDomain:        "dashboardcentrooeste.firebaseapp.com",
+    projectId:         "dashboardcentrooeste",
+    storageBucket:     "dashboardcentrooeste.firebasestorage.app",
+    messagingSenderId: "702556918719",
+    appId:             "1:702556918719:web:3823e5b5772c061e9c470a"
+  };
+  window.EMPRESA_ID = "inpasa";
+
+  const isConfigured = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== "COLE_AQUI";
+
+  function loadScript(src, cb) {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = cb;
+    s.onerror = () => { console.error('Falha ao carregar:', src); cb(); };
+    document.head.appendChild(s);
+  }
+
+  function start() {
+    loadDB().then(() => {
+      buildMonthFilter();
+      renderTerminal(currentTerminal);
+      renderConfig();
+      document.getElementById('monthFilterBar').style.display = 'flex';
+    });
+  }
+
+  if(isConfigured) {
+    loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js', () => {
+      loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js', () => {
+        try {
+          firebase.initializeApp(FIREBASE_CONFIG);
+          window.db_fire = firebase.firestore();
+          console.log('✅ Firebase Firestore conectado');
+        } catch(e) {
+          console.error('Erro Firebase:', e);
+          window.db_fire = null;
+        }
+        start();
+      });
+    });
+  } else {
+    console.warn('⚠️ Firebase não configurado — dados salvos localmente (localStorage).');
+    window.db_fire = null;
+    start();
+  }
+})();
 </script>
 </body>
 </html>
