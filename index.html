@@ -1363,8 +1363,14 @@ function renderTransitoTables(t, today) {
   // ── CARREGAMENTO USINA: vem das DESCARGAS por Data Chegada (D, D-1, D-2, D-3) ──
   // Agrupa descargas do terminal por data de chegada e filial
   const descByDate = {};
-  db.descargas.filter(r => r.cliente===clienteCod||r.terminal===t).forEach(r => {
-    if(!r.data) return;
+  // Filtro estrito: apenas registros destinados a ESTE terminal (pelo código de cliente)
+  // Exclui registros Rumo e de outros terminais
+  db.descargas.filter(r => {
+    if(!r.data) return false;
+    // Comparação numérica robusta: clienteCod é number, r.cliente pode ser number ou string
+    const cli = typeof r.cliente === 'number' ? r.cliente : parseFloat(r.cliente);
+    return cli === clienteCod;
+  }).forEach(r => {
     if(!descByDate[r.data]) descByDate[r.data] = { Sinop:0, 'Nova Mutum':0 };
     descByDate[r.data][r.filial] = (descByDate[r.data][r.filial]||0) + r.pesoDst/1000;
   });
