@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- v1.1 -->
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
@@ -599,7 +600,7 @@ async function loadDB() {
 
   if(Object.keys(db.nfClienteMap).length===0 && db.notas.length>0) {
     db.notas.forEach(r=>{ const c=(r.nomeCliente||'').trim(); if(c&&r.nf&&r.terminal) db.nfClienteMap[r.terminal+'_'+r.nf]=c; });
-    if(Object.keys(db.nfClienteMap).length>0) saveDB('nfClienteMap');
+    if(Object.keys(db.nfClienteMap).length>0) saveDB('nfClienteMap').catch(()=>{});
   }
 
   if(window.db_fire) {
@@ -611,7 +612,7 @@ async function loadDB() {
   const lu=localStorage.getItem('op_lastupdate');
   if(lu) document.getElementById('lastUpdate').textContent=lu;
 }
-async async function saveDB(key) {
+async function saveDB(key) {
   const value = db[key];
   // Sempre salva no localStorage como cache
   if(DB_KEYS[key]) localStorage.setItem(DB_KEYS[key], JSON.stringify(value));
@@ -829,7 +830,7 @@ function processFile(file, type) {
       else if(type==='transito') ({added,skipped}=processTransito(rows));
       else if(type==='notas') ({added,skipped}=processNotas(rows));
       saveDB(type);
-      if(type==='notas') { saveDB('produtoMap'); saveDB('nfClienteMap'); }
+      if(type==='notas') { saveDB('produtoMap').catch(()=>{}); saveDB('nfClienteMap').catch(()=>{}); }
       buildMonthFilter();
       setStatus(type,'success',`✅ ${added} registros adicionados, ${skipped} duplicatas ignoradas.`);
       renderLogs();
@@ -1620,7 +1621,7 @@ function saveConfig(t){
     const el=document.getElementById(`cfg_${t}_${f}`);
     if(el) db.config[t][f]=parseFloat(el.value)||0;
   });
-  saveDB('config');
+  saveDB('config').catch(()=>{});
   renderConfig();
   alert('✅ Configurações salvas!');
 }
@@ -1677,7 +1678,7 @@ function renderLog(type,data,fn){
 // ============================================================
 // CLEAR DATA
 // ============================================================
-async async function clearData(type) {
+async function clearData(type) {
   const labels = {descargas:'Descargas',transito:'Trânsito',notas:'Notas Fiscais',estoque:'Estoque'};
   if(!confirm(`⚠️ Tem certeza que deseja apagar todos os dados de ${labels[type]}?\nEsta ação não pode ser desfeita.`)) return;
   db[type] = [];
