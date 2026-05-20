@@ -1239,6 +1239,42 @@ function processEstoque(file, produto, data) {
 }
 
 // ============================================================
+// PROCESS ESTOQUE CONSOLIDADO (arquivo único com todas as datas)
+// Formato: colunas date, terminal, produto, saldo_m3
+// ============================================================
+function processEstoqueConsolidado(rows) {
+  // Detect if this is the consolidated format
+  // Header should have 'date', 'terminal', 'produto', 'saldo_m3'
+  const hdr = rows[0] ? rows[0].map(v=>String(v||'').toLowerCase().trim()) : [];
+  const dateIdx    = hdr.findIndex(h=>h==='date');
+  const termIdx    = hdr.findIndex(h=>h==='terminal');
+  const prodIdx    = hdr.findIndex(h=>h==='produto');
+  const saldoIdx   = hdr.findIndex(h=>h.includes('saldo_m3')||h.includes('saldo m3'));
+  if(dateIdx<0||termIdx<0||prodIdx<0||saldoIdx<0) return false; // not consolidated format
+
+  const existingKey = new Set(db.estoque.map(r=>`${r.data}_${r.produto}_${r.terminal}_cons`));
+  let added=0, skipped=0;
+  for(let i=1;i<rows.length;i++){
+    const r=rows[i];
+    const date    = String(r[dateIdx]||'').trim().substring(0,10);
+    const terminal= String(r[termIdx]||'').trim().toLowerCase();
+    const produto = String(r[prodIdx]||'').trim();
+    const saldo   = typeof r[saldoIdx]==='number' ? r[saldoIdx] : parseFloat(String(r[saldoIdx]||'0').replace(',','.'));
+    if(!date||!terminal||!produto||isNaN(saldo)) continue;
+    const key=`${date}_${produto}_${terminal}_cons`;
+    if(existingKey.has(key)){skipped++;continue;}
+    existingKey.add(key);
+    db.estoque.push({
+      data:date, produto, terminal, dep:'cons',
+      descDep:'Consolidado', gef:'',
+      saldoAnt:0, entradas:0, saidas:0, saldoAtual:saldo*1000 // store in litros
+    });
+    added++;
+  }
+  return {added, skipped};
+}
+
+// ============================================================
 // MODAL CLASSIFICATION
 // ============================================================
 function classifyModal(transp, placa, nomeCliente, terminal) {
@@ -2806,5 +2842,38 @@ async function renderTopHTML(container) {
 
 
 </script>
+
+<!-- ── PDF MODAL ── -->
+<div class="pdf-overlay" id="pdfOverlay">
+  <div class="pdf-modal">
+    <div class="pdf-modal-head">
+      <h3>📄 Exportar Relatório PDF</h3>
+      <button onclick="closePdfModal()" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;line-height:1">×</button>
+    </div>
+    <div class="pdf-modal-body">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:16px">Selecione as seções para incluir no relatório:</div>
+      <div class="pdf-section-check"><input type="checkbox" id="pdfTeciap" checked><label for="pdfTeciap">🏭 Terminal TECIAP<div class="pdf-sub">KPIs, carregamentos, quebra mensal</div></label></div>
+      <div class="pdf-section-check"><input type="checkbox" id="pdfUltra" checked><label for="pdfUltra">🏭 Terminal ULTRACARGO RO<div class="pdf-sub">KPIs, carregamentos, quebra mensal</div></label></div>
+      <div class="pdf-section-check"><input type="checkbox" id="pdfCentro" checked><label for="pdfCentro">🏭 Terminal CENTROESTE<div class="pdf-sub">KPIs, carregamentos, quebra mensal</div></label></div>
+      <div class="pdf-section-check"><input type="checkbox" id="pdfFerro" checked><label for="pdfFerro">🚂 Monitoramento Ferrovia<div class="pdf-sub">KPIs, carregamento por destino</div></label></div>
+      <div class="pdf-section-check"><input type="checkbox" id="pdfTop" checked><label for="pdfTop">📊 Take or Pay Ferrovia<div class="pdf-sub">Tabela anual e trimestral com índices</div></label></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+        <div style="font-size:11px;color:var(--text2)">Mês referência:</div>
+        <div style="font-size:12px;font-weight:700;color:var(--blue)" id="pdfMesRef">—</div>
+        <div style="font-size:11px;color:var(--text2);margin-left:auto">Atualização:</div>
+        <div style="font-size:12px;font-weight:700;color:var(--blue)" id="pdfLastUp">—</div>
+      </div>
+      <div class="pdf-progress" id="pdfProgress">
+        <div id="pdfProgressText">Gerando relatório...</div>
+        <div class="pdf-progress-bar"><div class="pdf-progress-bar-inner" id="pdfProgressBar"></div></div>
+      </div>
+    </div>
+    <div class="pdf-modal-actions">
+      <button class="btn-pdf-cancel" onclick="closePdfModal()">Cancelar</button>
+      <button class="btn-pdf-gen" onclick="gerarPDF()">📄 Gerar e Baixar PDF</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
