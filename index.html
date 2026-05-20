@@ -2537,12 +2537,13 @@ async function gerarPDF() {
     }
 
     // Restore original page
-    showPage(document.querySelector('.nav-item.active')?.dataset?.page || 'terminals');
+    showPage('terminals');
 
     setProgress(95, 'Finalizando PDF...');
     await new Promise(r=>setTimeout(r,300));
 
-    const fileName = `Dashboard_Logistica_${curMonthStr}_${new Date().toLocaleDateString('pt-BR').replace(/\/g,'-')}.pdf`;
+    const today_fn = new Date(); const dateStr = today_fn.getDate()+'_'+(today_fn.getMonth()+1)+'_'+today_fn.getFullYear();
+    const fileName = 'Dashboard_Logistica_'+curMonthStr+'_'+dateStr+'.pdf';
     pdf.save(fileName);
     setProgress(100, '✅ PDF gerado com sucesso!');
     setTimeout(()=>{ progDiv.style.display='none'; }, 3000);
