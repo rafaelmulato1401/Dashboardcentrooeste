@@ -2714,7 +2714,7 @@ async function gerarPDF() {
       drawBarChart(M, CT2, CW, CH, lbl30, carrDS.length?carrDS:[{label:'Total',data:lbl30.map(()=>null),borderColor:'#1a3a6b'}], 'm³');
 
       // ── GRÁFICO 3: Abertura de Estoque ──
-      const CT3=CT2+CH+7;
+      const CT3=CT2+CH+4;
       setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5);
       pdf.text('ABERTURA DE ESTOQUE', M, CT3-1);
       const estDS=[
@@ -2724,7 +2724,7 @@ async function gerarPDF() {
       drawBarChart(M, CT3, CW, CH, lbl30, estDS.length?estDS:[{label:'Sem dados',data:lbl30.map(()=>null),borderColor:'#9aa3bb'}], 'm³');
 
       // ── TABELAS: 4 tabelas 2x2 ──
-      const tblY=CT3+CH3+3;
+      const tblY=CT3+CH+3;
       const tblHalf=(W-2*M)/2-3;
       const tblCols=[['',6],['Data',26],['Sinop',24,'right'],['N.Mutum',24,'right'],['Total',22,'right']];
       const todayD2=new Date(today2+'T12:00:00');
