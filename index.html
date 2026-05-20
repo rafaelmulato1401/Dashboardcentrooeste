@@ -2680,7 +2680,7 @@ async function gerarPDF() {
       const nmD=days.map(d=>descMes.filter(r=>new Date(r.data+'T12:00:00').getDate()===d&&r.filial==='Nova Mutum').reduce((s,r)=>s+r.pesoDst,0)/1000||null);
 
       const chartTop=k2Y+kpiH+3;
-      const chartH2=50, chartW2=130;
+      const chartH2=60, chartW2=185;
       drawBarChart(M, chartTop, chartW2, chartH2, lbl30,
         [{label:'Sinop',data:sinopD,borderColor:'#1a3a6b'},{label:'Nova Mutum',data:nmD,borderColor:'#f0a500'}],
         'm³');
@@ -2691,12 +2691,14 @@ async function gerarPDF() {
 
       // ── TABLES: Carregamento Usina + Quebra Mensal ──
       const tblX=M+chartW2+4, tblY=chartTop;
-      const tblW=W-M-tblX;
+      const tblW=W-M-tblX; // ~88mm
+      // Compact column widths for narrow table
+      const usColW = tblW/5;
 
       // Carregamento Usina
-      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5);
+      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(7);
       pdf.text('CARREGAMENTO USINA', tblX, tblY+3);
-      const usCols=[['',8],['Data',22],['Sinop',20,'right'],['N.Mutum',20,'right'],['Total',18,'right']];
+      const usCols=[['',usColW*.15],['Data',usColW*.95],['Sinop',usColW*.9,'right'],['N.Mutum',usColW*.9,'right'],['Total',usColW*.8,'right']];
       drawTableHeader(tblX, tblY+4, tblW, usCols, color);
       const todayD2=new Date(today2+'T12:00:00');
       ['D','D-1','D-2','D-3'].forEach((lbl,i)=>{
@@ -2706,15 +2708,17 @@ async function gerarPDF() {
         const s2=rows2.filter(r=>r.filial==='Sinop').reduce((a,r)=>a+r.qtde,0)/1000;
         const n2=rows2.filter(r=>r.filial==='Nova Mutum').reduce((a,r)=>a+r.qtde,0)/1000;
         const bg=i%2?'#f7f9fd':null;
+        pdf.setFontSize(6.5);
         drawTableRow(tblX, tblY+10+i*5.5, tblW, usCols,
           [lbl, fmtDate(ds), s2?fmt(s2):'-', n2?fmt(n2):'-', (s2+n2)?fmt(s2+n2):'-'], bg, '#1a2340');
       });
 
       // Quebra Mensal
       const qY=tblY+35;
-      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5);
+      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(7);
       pdf.text('QUEBRA MENSAL', tblX, qY+3);
-      const qCols=[['Filial',30],['Entrada m³',25,'right'],['Quebra m³',22,'right'],['Índice',15,'right']];
+      const qColW = tblW/4;
+      const qCols=[['Filial',qColW*1.1],['Entrada m³',qColW*.95,'right'],['Quebra m³',qColW*.95,'right'],['Índice',qColW*.7,'right']];
       drawTableHeader(tblX, qY+4, tblW, qCols, color);
       let totE=0,totQ=0;
       ['Sinop','Nova Mutum'].forEach((f,i)=>{
