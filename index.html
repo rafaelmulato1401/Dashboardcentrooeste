@@ -2832,7 +2832,41 @@ async function gerarPDF() {
       const fDS=Object.entries(DINFO).map(([cod,info])=>({label:info.l,color:info.c,data:days.map(d=>fNotas.filter(r=>new Date(r.data+'T12:00:00').getDate()===d&&(r.nomeCliente||'').toUpperCase().includes(info.l.toUpperCase().split(' ')[0])).reduce((s,r)=>s+r.qtde,0)/1000||null)})).filter(ds=>ds.data.some(v=>v));
       if(!fDS.length)fDS.push({label:'Total',color:GOLD,data:days.map(d=>fNotas.filter(r=>new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000||null)});
 
-      barChart(M,CY0,CLW,H-M-6-CY0,lbl31,fDS,'CARREGAMENTO FERROVIÁRIO — TECIAP / ULTRACARGO',BLUE);
+      // Heights: 3 charts stacked on left, table on right
+      const totalChH = H - M - 6 - CY0; // available height for charts
+      const CH_F1 = Math.floor(totalChH * 0.38); // Carregamento
+      const CH_F2 = Math.floor(totalChH * 0.35); // Descarga
+      const CH_F3 = totalChH - CH_F1 - CH_F2 - 8; // Previsão (remaining - gaps)
+
+      // CHART 1: Carregamento Ferroviário
+      barChart(M,CY0,CLW,CH_F1,lbl31,fDS,'CARREGAMENTO FERROVIÁRIO — TECIAP / ULTRACARGO',BLUE);
+
+      // CHART 2: Descarga Ferroviária (descargas com terminal rumo_*)
+      const descRumo=db.descargas.filter(r=>r.terminal&&r.terminal.startsWith('rumo_')&&r.data&&r.data.startsWith(curM));
+      const descHidD=days.map(d=>descRumo.filter(r=>new Date(r.data+'T12:00:00').getDate()===d&&r.produto==='Hidratado').reduce((s,r)=>s+r.pesoDst,0)/1000||null);
+      const descAniD=days.map(d=>descRumo.filter(r=>new Date(r.data+'T12:00:00').getDate()===d&&r.produto==='Anidro').reduce((s,r)=>s+r.pesoDst,0)/1000||null);
+      const descAllD=days.map(d=>descRumo.filter(r=>new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.pesoDst,0)/1000||null);
+      const descDS=descRumo.some(r=>r.produto)
+        ? [{label:'Hidratado',data:descHidD,color:BLUE},{label:'Anidro',data:descAniD,color:GOLD}].filter(ds=>ds.data.some(v=>v))
+        : [{label:'Total',data:descAllD,color:BLUE}];
+      barChart(M,CY0+CH_F1+4,CLW,CH_F2,lbl31,descDS,'DESCARGA FERROVIÁRIA — TERMINAIS',BLUE);
+
+      // CHART 3: Previsão Descarga (transitoFerro, prevChegada = emissão+5d)
+      const rumoTrans=(db.transitoFerro||[]);
+      const today3=localDateStr(new Date());
+      const todayDT=new Date(today3+'T12:00:00');
+      // Build previsão labels: D-5 to D+10 relative to today
+      const prevRange=Array.from({length:16},(_,i)=>i-5); // -5 to +10
+      const prevLabels=prevRange.map(o=>{const d=new Date(todayDT);d.setDate(d.getDate()+o);return(o===0?'D':o>0?'D+'+o:'D'+o);});
+      const prevDates=prevRange.map(o=>{const d=new Date(todayDT);d.setDate(d.getDate()+o);return localDateStr(d);});
+      const prevLogum=prevDates.map(dt=>rumoTrans.filter(r=>r.prevChegada===dt&&Number(r.clienteCod)===11966).reduce((s,r)=>s+r.pesoLiq,0)/1000||null);
+      const prevPaul=prevDates.map(dt=>rumoTrans.filter(r=>r.prevChegada===dt&&Number(r.clienteCod)===7605).reduce((s,r)=>s+r.pesoLiq,0)/1000||null);
+      const prevTotal=prevDates.map(dt=>rumoTrans.filter(r=>r.prevChegada===dt).reduce((s,r)=>s+r.pesoLiq,0)/1000||null);
+      const prevDS=rumoTrans.some(r=>r.clienteCod)
+        ? [{label:'Logum',data:prevLogum,color:BLUE},{label:'Paulínia',data:prevPaul,color:GOLD}].filter(ds=>ds.data.some(v=>v))
+        : [{label:'Total',data:prevTotal,color:BLUE}];
+      if(!prevDS.length) prevDS.push({label:'Sem dados de trânsito',data:prevLabels.map(()=>null),color:'#9aa3bb'});
+      barChart(M,CY0+CH_F1+CH_F2+8,CLW,CH_F3,prevLabels,prevDS,'PREVISÃO DESCARGA NOS TERMINAIS (Rumo +5 dias)',BLUE);
 
       // Carregamento por Destino table
       const cliSet=new Set();fNotas.forEach(r=>{const c=(r.nomeCliente||'').trim();if(c)cliSet.add(c);});
