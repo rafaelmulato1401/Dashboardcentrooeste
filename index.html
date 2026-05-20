@@ -2670,33 +2670,74 @@ async function gerarPDF() {
       const k2W=(W-2*M)/kpis2.length, k2Y=kpiY+kpiH+2;
       kpis2.forEach(([ac,lb,vl,sb],i)=>drawKpi(M+i*k2W, k2Y, k2W-1, kpiH, ac, lb, vl, sb));
 
-      // ── CHART: Descarga Rodoviária — full width ──
+      // ── DADOS DOS 3 GRÁFICOS ──
       const days=Array.from({length:diasMes},(_,i)=>i+1);
-      const lbl30=days.map(d=>d+'/'+String(cm2).padStart(2,'00'));
+      const lbl30=days.map(d=>String(d));
+
+      // Descarga Rodoviária (por filial)
       const sinopD=days.map(d=>descMes.filter(r=>new Date(r.data+'T12:00:00').getDate()===d&&r.filial==='Sinop').reduce((s,r)=>s+r.pesoDst,0)/1000||null);
       const nmD=days.map(d=>descMes.filter(r=>new Date(r.data+'T12:00:00').getDate()===d&&r.filial==='Nova Mutum').reduce((s,r)=>s+r.pesoDst,0)/1000||null);
 
-      const chartTop=k2Y+kpiH+4;
-      const chartW2=W-2*M; // full width
-      const chartH2=58;
+      // Carregamentos (Ferro / Rodo / Transf por modal)
+      const carrFerroD=days.map(d=>notasMes.filter(r=>r.modal==='Ferroviário'&&new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000||null);
+      const carrRodoD=days.map(d=>notasMes.filter(r=>r.modal==='Rodoviário'&&new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000||null);
+      const carrTransfD=days.map(d=>notasMes.filter(r=>r.modal==='Transferência em Tanque'&&new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000||null);
 
-      // Chart title
-      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(8);
-      pdf.text('DESCARGA RODOVIÁRIA', M, chartTop-1);
+      // Abertura de Estoque (Hidratado / Anidro)
+      const estoqueT=db.estoque.filter(r=>r.terminal===t&&r.data&&r.data.startsWith(curM));
+      const estHidD=days.map(d=>{
+        const ds=cy2+'-'+String(cm2).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+        const r=estoqueT.find(e=>e.data===ds&&e.produto==='Hidratado');
+        return r?(r.saldoAtual||0)/1000:null;
+      });
+      const estAniD=days.map(d=>{
+        const ds=cy2+'-'+String(cm2).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+        const r=estoqueT.find(e=>e.data===ds&&e.produto==='Anidro');
+        return r?(r.saldoAtual||0)/1000:null;
+      });
 
-      // Draw full-width chart with value labels
-      drawBarChart(M, chartTop, chartW2, chartH2, lbl30,
-        [{label:'Sinop',data:sinopD,borderColor:'#1a3a6b'},{label:'Nova Mutum',data:nmD,borderColor:'#f0a500'}],
-        'm³', true); // true = show value labels
+      // ── PÁGINA 2 DO TERMINAL: gráficos + tabelas ──
+      pdf.addPage();
+      drawChrome('TERMINAL '+tc.label+' — GRÁFICOS & TABELAS — '+mesLbl);
+      const CW=W-2*M;  // chart full width
+      const CH=42;     // chart height each
+      const CT=15;     // start below header
 
-      // ── TABLES below chart — side by side ──
-      const tblY=chartTop+chartH2+5;
+      // ── GRÁFICO 1: Descarga Rodoviária ──
+      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5);
+      pdf.text('DESCARGA RODOVIÁRIA', M, CT-1);
+      drawBarChart(M, CT, CW, CH, lbl30,
+        [{label:'Sinop',data:sinopD,borderColor:'#1a3a6b'},{label:'Nova Mutum',data:nmD,borderColor:'#f0a500'}], 'm³');
+
+      // ── GRÁFICO 2: Carregamentos ──
+      const CT2=CT+CH+7;
+      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5);
+      pdf.text('CARREGAMENTOS — FERRO / RODO / TRANSF', M, CT2-1);
+      const carrDS=[
+        {label:'Ferrovia',data:carrFerroD,borderColor:'#1a3a6b'},
+        {label:'Rodoviário',data:carrRodoD,borderColor:'#f0a500'},
+        {label:'Transf.',data:carrTransfD,borderColor:'#1a6b35'},
+      ].filter(ds=>ds.data.some(v=>v));
+      drawBarChart(M, CT2, CW, CH, lbl30, carrDS.length?carrDS:[{label:'Total',data:lbl30.map(()=>null),borderColor:'#1a3a6b'}], 'm³');
+
+      // ── GRÁFICO 3: Abertura de Estoque ──
+      const CT3=CT2+CH+7;
+      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5);
+      pdf.text('ABERTURA DE ESTOQUE', M, CT3-1);
+      const estDS=[
+        {label:'Hidratado',data:estHidD,borderColor:'#1a3a6b'},
+        {label:'Anidro',data:estAniD,borderColor:'#f0a500'},
+      ].filter(ds=>ds.data.some(v=>v));
+      drawBarChart(M, CT3, CW, CH, lbl30, estDS.length?estDS:[{label:'Sem dados',data:lbl30.map(()=>null),borderColor:'#9aa3bb'}], 'm³');
+
+      // ── TABELAS abaixo dos gráficos ──
+      const tblY=CT3+CH+6;
       const tblHalf=(W-2*M)/2-3;
 
       // LEFT: Carregamento Usina
       setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5);
       pdf.text('CARREGAMENTO USINA', M, tblY+3);
-      const usCols=[['',8],['Data',30],['Sinop',28,'right'],['N.Mutum',28,'right'],['Total',26,'right']];
+      const usCols=[['',7],['Data',28],['Sinop',26,'right'],['N.Mutum',26,'right'],['Total',24,'right']];
       drawTableHeader(M, tblY+4, tblHalf, usCols, color);
       const todayD2=new Date(today2+'T12:00:00');
       let usTotal=[0,0];
@@ -2707,19 +2748,19 @@ async function gerarPDF() {
         const s2=rows2.filter(r=>r.filial==='Sinop').reduce((a,r)=>a+r.qtde,0)/1000;
         const n2=rows2.filter(r=>r.filial==='Nova Mutum').reduce((a,r)=>a+r.qtde,0)/1000;
         usTotal[0]+=s2; usTotal[1]+=n2;
-        drawTableRow(M, tblY+10+i*6, tblHalf, usCols,
-          [lbl, fmtDate(ds), s2?fmt(s2):'-', n2?fmt(n2):'-', (s2+n2)?fmt(s2+n2):'-'],
-          i%2?'#f7f9fd':null, '#1a2340');
+        drawTableRow(M, tblY+10+i*5.5, tblHalf, usCols,
+          [lbl,fmtDate(ds),s2?fmt(s2):'-',n2?fmt(n2):'-',(s2+n2)?fmt(s2+n2):'-'],
+          i%2?'#f7f9fd':null,'#1a2340');
       });
-      drawTableRow(M, tblY+34, tblHalf, usCols,
-        ['Total','', fmt(usTotal[0]), fmt(usTotal[1]), fmt(usTotal[0]+usTotal[1])],
+      drawTableRow(M, tblY+32, tblHalf, usCols,
+        ['Total','',fmt(usTotal[0]),fmt(usTotal[1]),fmt(usTotal[0]+usTotal[1])],
         '#e8eef8','#1a3a6b');
 
       // RIGHT: Quebra Mensal
       const qX=M+tblHalf+6;
       setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5);
       pdf.text('QUEBRA MENSAL', qX, tblY+3);
-      const qCols=[['Filial',45],['Entrada m³',38,'right'],['Quebra m³',35,'right'],['Índice',25,'right']];
+      const qCols=[['Filial',42],['Entrada m³',36,'right'],['Quebra m³',33,'right'],['Índice',24,'right']];
       drawTableHeader(qX, tblY+4, tblHalf, qCols, color);
       let totE=0,totQ=0;
       ['Sinop','Nova Mutum'].forEach((f,i)=>{
@@ -2727,12 +2768,12 @@ async function gerarPDF() {
         const ent=sub.reduce((s,r)=>s+r.pesoDst,0)/1000;
         const qbr=sub.reduce((s,r)=>s+(r.quebra||0),0)/1000;
         totE+=ent; totQ+=qbr;
-        drawTableRow(qX, tblY+10+i*6, tblHalf, qCols,
-          [f, fmt(ent), fmt(qbr), ent?(qbr/ent*100).toFixed(2)+'%':'-'],
+        drawTableRow(qX,tblY+10+i*5.5,tblHalf,qCols,
+          [f,fmt(ent),fmt(qbr),ent?(qbr/ent*100).toFixed(2)+'%':'-'],
           i%2?'#f7f9fd':null);
       });
-      drawTableRow(qX, tblY+22, tblHalf, qCols,
-        ['Total', fmt(totE), fmt(totQ), totE?(totQ/totE*100).toFixed(2)+'%':'-'],
+      drawTableRow(qX,tblY+21,tblHalf,qCols,
+        ['Total',fmt(totE),fmt(totQ),totE?(totQ/totE*100).toFixed(2)+'%':'-'],
         '#e8eef8','#1a3a6b');
     }
 
