@@ -248,6 +248,31 @@
   .mt8 { margin-top:8px; }
 
   @keyframes fadeIn { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:none} }
+
+  /* ── PDF MODAL ── */
+  .pdf-overlay { position:fixed;inset:0;background:rgba(10,20,50,.7);z-index:2000;display:none;align-items:center;justify-content:center; }
+  .pdf-overlay.open { display:flex; }
+  .pdf-modal { background:var(--bg2);border:2px solid var(--blue);border-radius:14px;width:520px;overflow:hidden;box-shadow:0 20px 60px rgba(10,20,60,.4); }
+  .pdf-modal-head { background:var(--blue);padding:16px 20px;display:flex;align-items:center;justify-content:space-between; }
+  .pdf-modal-head h3 { font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;color:#fff; }
+  .pdf-modal-body { padding:24px; }
+  .pdf-section-check { display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;margin-bottom:8px;transition:all .18s; }
+  .pdf-section-check:hover { border-color:var(--blue);background:rgba(26,58,107,.04); }
+  .pdf-section-check input[type=checkbox] { width:16px;height:16px;cursor:pointer;accent-color:var(--blue); }
+  .pdf-section-check label { font-size:13px;font-weight:600;cursor:pointer;flex:1; }
+  .pdf-section-check .pdf-sub { font-size:11px;color:var(--text2); }
+  .pdf-progress { display:none;margin-top:16px;padding:12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text2); }
+  .pdf-progress-bar { height:4px;background:var(--border);border-radius:2px;margin-top:8px;overflow:hidden; }
+  .pdf-progress-bar-inner { height:100%;background:var(--blue);border-radius:2px;width:0;transition:width .3s; }
+  .pdf-modal-actions { display:flex;gap:10px;padding:16px 20px;background:var(--bg3);border-top:1px solid var(--border); }
+  .btn-pdf-gen { flex:1;background:var(--blue);color:#fff;border:none;padding:11px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:700;transition:all .2s; }
+  .btn-pdf-gen:hover { background:var(--blue-dark); }
+  .btn-pdf-cancel { flex:1;background:var(--bg2);color:var(--text2);border:1.5px solid var(--border);padding:11px;border-radius:7px;cursor:pointer;font-size:13px; }
+
+  @media print {
+    .nav,.month-filter-bar,.terminal-tabs,.btn-upload-nav,.btn-clear-data,.btn-clear-all,
+    .drop-zone,.upload-status,.data-log,.upload-card-desc { display:none!important; }
+  }
 </style>
 
 </head>
@@ -264,6 +289,7 @@
   </div>
   <div class="nav-right">
     <div class="last-update">Última atualização: <span id="lastUpdate">—</span></div>
+    <button class="btn-upload-nav" onclick="exportPDF()" style="background:var(--blue-dark);margin-right:6px">📄 Exportar PDF</button>
     <button class="btn-upload-nav" onclick="showPage('upload')">↑ Upload Dados</button>
   </div>
 </nav>
@@ -2317,6 +2343,459 @@ function fmtDate(d){if(!d)return '-';const p=d.split('-');return p.length===3?`$
     window.db_fire = null;
     start();
   }
+
+// ============================================================
+// PDF EXPORT
+// ============================================================
+function exportPDF() {
+  // Update modal info
+  document.getElementById('pdfMesRef').textContent = getCurMonth();
+  document.getElementById('pdfLastUp').textContent = document.getElementById('lastUpdate').textContent;
+  document.getElementById('pdfOverlay').classList.add('open');
+  document.getElementById('pdfProgress').style.display = 'none';
+}
+function closePdfModal() {
+  document.getElementById('pdfOverlay').classList.remove('open');
+}
+
+async function gerarPDF() {
+  const sections = {
+    teciap: document.getElementById('pdfTeciap').checked,
+    ultra:  document.getElementById('pdfUltra').checked,
+    centro: document.getElementById('pdfCentro').checked,
+    ferro:  document.getElementById('pdfFerro').checked,
+    top:    document.getElementById('pdfTop').checked,
+  };
+  if(!Object.values(sections).some(Boolean)) { alert('Selecione ao menos uma seção.'); return; }
+
+  const progDiv  = document.getElementById('pdfProgress');
+  const progText = document.getElementById('pdfProgressText');
+  const progBar  = document.getElementById('pdfProgressBar');
+  progDiv.style.display = 'block';
+
+  function setProgress(pct, txt) { progBar.style.width=pct+'%'; progText.textContent=txt; }
+
+  try {
+    setProgress(5, 'Carregando biblioteca PDF...');
+    // Load html2canvas + jsPDF dynamically
+    await loadScriptIfNeeded('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+    await loadScriptIfNeeded('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    const { jsPDF } = window.jspdf;
+
+    const pdf = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4' });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const margin = 10;
+    let isFirstPage = true;
+
+    const curMonthStr = getCurMonth();
+    const [cy, cm] = curMonthStr.split('-');
+    const mesLabel = MONTHS[parseInt(cm)-1]+' / '+cy;
+    const lastUpLabel = document.getElementById('lastUpdate').textContent;
+
+    // ── Helper: render a dashboard section to PDF ──
+    async function addSectionToPDF(renderFn, title, stepPct, stepLabel) {
+      setProgress(stepPct, stepLabel);
+
+      // Prepare a temp container
+      const container = document.createElement('div');
+      container.style.cssText = `
+        position:fixed; left:-9999px; top:0; z-index:-1;
+        width:1400px; background:#f4f7fd; font-family:'Barlow',sans-serif;
+        padding:20px;
+      `;
+      document.body.appendChild(container);
+
+      // Inject CSS vars
+      container.innerHTML = `<style>
+        :root{--blue:#1a3a6b;--gold:#f0a500;--bg:#f4f7fd;--bg2:#fff;--bg3:#e8eef8;
+              --border:#cdd5e8;--text:#1a2340;--text2:#6b7a99;--text3:#9aa3bb;
+              --teciap:#1a3a6b;--ultra:#0e6674;--centro:#5b2d8e;
+              --accent2:#1a6b35;--danger:#b91c1c;}
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{font-family:'Barlow',sans-serif;font-size:13px;}
+      </style>`;
+
+      // Call the render function to populate container
+      await renderFn(container, mesLabel, lastUpLabel);
+
+      await new Promise(r=>setTimeout(r,300)); // wait for render
+
+      const canvas = await html2canvas(container, {
+        scale: 1.8,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#f4f7fd',
+        logging: false,
+      });
+      document.body.removeChild(container);
+
+      // Add to PDF
+      if(!isFirstPage) pdf.addPage();
+      isFirstPage = false;
+
+      // Header band
+      pdf.setFillColor(26, 58, 107);
+      pdf.rect(0, 0, pageW, 12, 'F');
+      pdf.setTextColor(255,255,255);
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica','bold');
+      pdf.text('OPERAÇÕES LOGÍSTICA — INPASA', margin, 8);
+      pdf.setFont('helvetica','normal');
+      pdf.text(title, pageW/2, 8, {align:'center'});
+      pdf.text(`${mesLabel}  |  Atualização: ${lastUpLabel}`, pageW-margin, 8, {align:'right'});
+
+      // Gold accent line
+      pdf.setFillColor(240, 165, 0);
+      pdf.rect(0, 12, pageW, 1.5, 'F');
+
+      // Content
+      const contentY = 15;
+      const contentH = pageH - contentY - 6;
+      const imgW = pageW - 0;
+      const imgH = (canvas.height / canvas.width) * imgW;
+      const finalH = Math.min(imgH, contentH);
+      const finalW = (finalH / imgH) * imgW;
+
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.88), 'JPEG',
+        (pageW - finalW)/2, contentY, finalW, finalH);
+
+      // Footer
+      pdf.setFillColor(240, 165, 0);
+      pdf.rect(0, pageH-6, pageW, 6, 'F');
+      pdf.setTextColor(26,58,107);
+      pdf.setFontSize(7);
+      pdf.setFont('helvetica','normal');
+      pdf.text('Confidencial — Uso Interno INPASA', pageW/2, pageH-2, {align:'center'});
+    }
+
+    // ── Render each terminal section ──
+    const termConfigs = [
+      {key:'teciap', name:'TECIAP'},
+      {key:'ultra',  name:'ULTRACARGO RO'},
+      {key:'centro', name:'CENTROESTE'},
+    ];
+
+    let step = 10;
+    for(const tc of termConfigs) {
+      if(!sections[tc.key]) continue;
+      await addSectionToPDF(
+        (container) => renderTerminalHTML(container, tc.key),
+        `TERMINAL ${tc.name} — ${mesLabel}`,
+        step, `Renderizando ${tc.name}...`
+      );
+      step += 15;
+    }
+
+    // ── Ferrovia ──
+    if(sections.ferro) {
+      await addSectionToPDF(
+        (container) => renderFerroviaHTML(container),
+        `MONITORAMENTO FERROVIA — ${mesLabel}`,
+        step, 'Renderizando Ferrovia...'
+      );
+      step += 15;
+    }
+
+    // ── Take or Pay ──
+    if(sections.top) {
+      await addSectionToPDF(
+        (container) => renderTopHTML(container),
+        `TAKE OR PAY FERROVIA — ${cy}`,
+        step, 'Renderizando Take or Pay...'
+      );
+      step += 10;
+    }
+
+    setProgress(95, 'Finalizando PDF...');
+    await new Promise(r=>setTimeout(r,200));
+
+    const fileName = `Dashboard_Logistica_${curMonthStr}_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.pdf`;
+    pdf.save(fileName);
+    setProgress(100, '✅ PDF gerado com sucesso!');
+    setTimeout(()=>{ closePdfModal(); progDiv.style.display='none'; }, 2000);
+
+  } catch(err) {
+    console.error('PDF error:', err);
+    progText.textContent = '❌ Erro: ' + err.message;
+  }
+}
+
+function loadScriptIfNeeded(src) {
+  return new Promise((res, rej) => {
+    if(document.querySelector(`script[src="${src}"]`)) { res(); return; }
+    const s = document.createElement('script');
+    s.src = src; s.onload = res; s.onerror = rej;
+    document.head.appendChild(s);
+  });
+}
+
+// ── HTML renderers for each section ──
+async function renderTerminalHTML(container, t) {
+  const cfg = db.config[t] || {};
+  const curMonth = getCurMonth();
+  const [cy,cm] = curMonth.split('-').map(Number);
+  const diasMes = new Date(cy,cm,0).getDate();
+  const _dn=new Date(); const today=_dn.getFullYear()+'-'+String(_dn.getMonth()+1).padStart(2,'0')+'-'+String(_dn.getDate()).padStart(2,'0');
+  const diaAtual = curMonth===today.substring(0,7)?new Date().getDate():diasMes;
+  const diaD1 = diaAtual-1;
+  const clienteCod = TERMINAL_MAP[t].cod[0];
+  const descAll = db.descargas.filter(r=>r.cliente===clienteCod||r.terminal===t);
+  const descMes = descAll.filter(r=>r.data&&r.data.startsWith(curMonth));
+  const notas = db.notas.filter(r=>r.terminal===t);
+  const notasMes = notas.filter(r=>r.data&&r.data.startsWith(curMonth));
+  const cfgMes = (db.configHist[curMonth]||{})[t] || db.config[t] || {};
+  const top = cfgMes.top||0;
+  const volRecebido = descMes.reduce((s,r)=>s+r.pesoDst,0)/1000;
+  const expFerro = notasMes.filter(r=>r.modal==='Ferroviário').reduce((s,r)=>s+r.qtde,0)/1000;
+  const expRodo  = notasMes.filter(r=>r.modal!=='Ferroviário').reduce((s,r)=>s+r.qtde,0)/1000;
+  const saldoTop = volRecebido - top;
+  const metaDiaria = top>0?top/diasMes:0;
+  let backlog=0;
+  const diaLoop=curMonth===today.substring(0,7)?diaD1:diasMes;
+  if(metaDiaria>0&&diaLoop>=1){for(let d=1;d<=diaLoop;d++){const dD=descMes.filter(r=>new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.pesoDst,0)/1000;backlog=dD-metaDiaria+(d===1?0:backlog);}}
+  const descFiltD1=descMes.filter(r=>new Date(r.data+'T12:00:00').getDate()<=diaD1);
+  const acumD1=descFiltD1.reduce((s,r)=>s+r.pesoDst,0)/1000;
+  const diasD1Set=new Set(descFiltD1.map(r=>new Date(r.data+'T12:00:00').getDate()));
+  const media=diasD1Set.size>0?acumD1/diasD1Set.size:0;
+  const volProjetado=diaD1>=diasMes?volRecebido:(acumD1+media*(diasMes-diaD1));
+  const estatHid=cfgMes.estat_hid||0, estatAni=cfgMes.estat_ani||0;
+  const giro=(estatHid+estatAni)>0?volRecebido/(estatHid+estatAni):0;
+  const tarifaTerminal=cfgMes.tarifa||0;
+  const custo=tarifaTerminal*volRecebido;
+  const transitoAll=db.transito.filter(r=>r.terminal===t);
+  const transitoVol=transitoAll.reduce((s,r)=>s+r.pesoLiq,0)/1000;
+
+  // Build Quebra Mensal
+  let quebraRows='';
+  let totE=0,totQ=0;
+  ['Sinop','Nova Mutum'].forEach(f=>{
+    const sub=descMes.filter(r=>r.filial===f);
+    const ent=sub.reduce((s,r)=>s+r.pesoDst,0)/1000;
+    const qbr=sub.reduce((s,r)=>s+r.quebra,0)/1000;
+    totE+=ent;totQ+=qbr;
+    quebraRows+=`<tr><td>${f}</td><td style="text-align:right">${fmt(ent)}</td><td style="text-align:right">${fmt(qbr)}</td><td style="text-align:right">${ent?(qbr/ent*100).toFixed(2):0}%</td></tr>`;
+  });
+  const totIdx=totE?totQ/totE*100:0;
+  quebraRows+=`<tr style="font-weight:700;background:#e8eef8"><td>Total</td><td style="text-align:right">${fmt(totE)}</td><td style="text-align:right">${fmt(totQ)}</td><td style="text-align:right">${totIdx.toFixed(2)}%</td></tr>`;
+
+  // Carregamento Usina table
+  const todayD=new Date(today+'T12:00:00');
+  let usina='';
+  [0,-1,-2,-3].forEach((o,i)=>{
+    const d=new Date(todayD);d.setDate(d.getDate()+o);
+    const ds=localDateStr(d);
+    const rows=db.notas.filter(r=>(r.clienteCod===clienteCod||TERMINAL_MAP[t].cod.includes(r.clienteCod))&&r.data===ds);
+    const s=rows.filter(r=>r.filial==='Sinop').reduce((a,r)=>a+r.qtde,0)/1000;
+    const n=rows.filter(r=>r.filial==='Nova Mutum').reduce((a,r)=>a+r.qtde,0)/1000;
+    usina+=`<tr><td>${['D','D-1','D-2','D-3'][i]}</td><td>${ds}</td><td style="text-align:right">${s?fmt(s):'-'}</td><td style="text-align:right">${n?fmt(n):'-'}</td><td style="text-align:right">${(s+n)?fmt(s+n):'-'}</td></tr>`;
+  });
+
+  const tColor = TERMINAL_MAP[t].color;
+  const tName  = TERMINAL_MAP[t].name;
+
+  container.innerHTML += `
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:800;color:${tColor};margin-bottom:16px;letter-spacing:1px">
+      TERMINAL ${tName.toUpperCase()}
+    </div>
+    <!-- KPIs -->
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:16px">
+      ${[
+        ['Vol. Recebido',fmt(volRecebido),'m³'],
+        ['Expedido Ferrovia',fmt(expFerro),'m³'],
+        ['Expedido Rodo/Transf',fmt(expRodo),'m³'],
+        ['Take or Pay',fmt(top),'m³ contratado'],
+        ['Saldo ToP',fmt(saldoTop),'m³'],
+        ['Backlog Recebimento',fmt(Math.abs(backlog)),backlog>=0?'Acima do previsto':'Pendência'],
+        ['Vol. Projetado',fmt(volProjetado),'m³ estimado'],
+      ].map(([l,v,s])=>`
+        <div style="background:#fff;border:1px solid #cdd5e8;border-radius:8px;padding:10px;border-top:3px solid ${tColor}">
+          <div style="font-size:9px;font-weight:600;color:#6b7a99;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">${l}</div>
+          <div style="font-family:'Barlow Condensed';font-size:20px;font-weight:700;color:#1a2340">${v}</div>
+          <div style="font-size:9px;color:#9aa3bb">${s}</div>
+        </div>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px">
+      ${[
+        ['Trânsito Caminhões',fmt(transitoVol),'m³ a chegar'],
+        ['Estática Hidratado',fmt(estatHid),'m³'],
+        ['Estática Anidro',fmt(estatAni),'m³'],
+        ['Giro (×Estática)',(giro.toFixed(2))+'×','vezes recebida'],
+        ['Previsão Custo','R$ '+(custo.toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0})),`${fmt(volRecebido)} m³ × R$ ${tarifaTerminal.toFixed(2)}/m³`],
+      ].map(([l,v,s])=>`
+        <div style="background:#fff;border:1px solid #cdd5e8;border-radius:8px;padding:10px;border-top:3px solid #f0a500">
+          <div style="font-size:9px;font-weight:600;color:#6b7a99;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">${l}</div>
+          <div style="font-family:'Barlow Condensed';font-size:20px;font-weight:700;color:#1a2340">${v}</div>
+          <div style="font-size:9px;color:#9aa3bb">${s}</div>
+        </div>`).join('')}
+    </div>
+    <!-- Tables -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:${tColor};margin-bottom:8px;border-bottom:2px solid ${tColor};padding-bottom:4px">Carregamento Usina — D/D-1/D-2/D-3</div>
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr style="background:${tColor};color:#fff"><th style="padding:5px 8px;text-align:left"></th><th style="padding:5px 8px">Data</th><th style="padding:5px 8px">Sinop</th><th style="padding:5px 8px">N.Mutum</th><th style="padding:5px 8px">Total</th></tr></thead>
+          <tbody>${usina}</tbody>
+        </table>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:${tColor};margin-bottom:8px;border-bottom:2px solid ${tColor};padding-bottom:4px">Quebra Mensal</div>
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr style="background:${tColor};color:#fff"><th style="padding:5px 8px;text-align:left">Filial</th><th style="padding:5px 8px">Entrada</th><th style="padding:5px 8px">Quebra</th><th style="padding:5px 8px">Índice</th></tr></thead>
+          <tbody>${quebraRows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+async function renderFerroviaHTML(container) {
+  const curMonth=getCurMonth();
+  const [cy,cm]=curMonth.split('-').map(Number);
+  const diasMes=new Date(cy,cm,0).getDate();
+  const _dn=new Date();const today=_dn.getFullYear()+'-'+String(_dn.getMonth()+1).padStart(2,'0')+'-'+String(_dn.getDate()).padStart(2,'0');
+  const diaAtual=curMonth===today.substring(0,7)?new Date().getDate():diasMes;
+  const diaD1=diaAtual-1;
+  const ferroNotas=db.notas.filter(r=>r.modal==='Ferroviário'&&(r.terminal==='teciap'||r.terminal==='ultra')&&r.data&&r.data.startsWith(curMonth));
+  const cfgFerroMes=(db.configHist[curMonth]||{}).ferro||db.config.ferro||{};
+  const contrato=cfgFerroMes.contrato||88350;
+  const minimo=cfgFerroMes.minimo||Math.round(contrato*0.95);
+  const tarifaFerro=cfgFerroMes.tarifa||0;
+  const volCarreg=ferroNotas.reduce((s,r)=>s+r.qtde,0)/1000;
+  const saldo=volCarreg-contrato;
+  const ferroNotasD1=ferroNotas.filter(r=>new Date(r.data+'T12:00:00').getDate()<=diaD1);
+  const acumFerroD1=ferroNotasD1.reduce((s,r)=>s+r.qtde,0)/1000;
+  const diasD1F=new Set(ferroNotasD1.filter(r=>r.qtde>0).map(r=>new Date(r.data+'T12:00:00').getDate())).size;
+  const media=diasD1F>0?acumFerroD1/diasD1F:0;
+  const projetado=(diaD1>=diasMes)?volCarreg:(acumFerroD1+media*(diasMes-diaD1));
+  const saldoMin=volCarreg-minimo;
+  const custo=tarifaFerro*volCarreg;
+
+  // Tabela carregamento por destino (notas)
+  const clienteSet=new Set();
+  ferroNotas.forEach(r=>{const c=(r.nomeCliente||'').trim();if(c)clienteSet.add(c);});
+  const clientesList=Array.from(clienteSet).sort();
+  const days2=Array.from({length:diasMes},(_,i)=>i+1);
+  let rows='',totByDest={},grandTotal=0;
+  clientesList.forEach(c=>totByDest[c]=0);
+  days2.forEach(d=>{
+    const date=`${cy}-${String(cm).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dn=ferroNotas.filter(r=>r.data===date);
+    if(!dn.length)return;
+    const dt=dn.reduce((s,r)=>s+r.qtde,0)/1000;
+    grandTotal+=dt;
+    let row=`<td style="font-size:10px;padding:3px 6px;border-bottom:1px solid #cdd5e8">${d}/${String(cm).padStart(2,'0')}</td>`;
+    clientesList.forEach(c=>{const v=dn.filter(r=>(r.nomeCliente||'')===c).reduce((s,r)=>s+r.qtde,0)/1000;totByDest[c]+=v;row+=`<td style="text-align:right;font-size:10px;padding:3px 6px;border-bottom:1px solid #cdd5e8">${v?fmt(v):'-'}</td>`;});
+    row+=`<td style="text-align:right;font-size:10px;padding:3px 6px;border-bottom:1px solid #cdd5e8;font-weight:700">${dt?fmt(dt):'-'}</td>`;
+    rows+=`<tr>${row}</tr>`;
+  });
+  const totRow=`<tr style="background:#e8eef8;font-weight:700"><td style="padding:4px 6px;font-size:10px">Total</td>${clientesList.map(c=>`<td style="text-align:right;font-size:10px;padding:4px 6px">${totByDest[c]?fmt(totByDest[c]):'-'}</td>`).join('')}<td style="text-align:right;font-size:10px;padding:4px 6px">${grandTotal?fmt(grandTotal):'-'}</td></tr>`;
+
+  container.innerHTML += `
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:800;color:#1a3a6b;margin-bottom:16px">
+      MONITORAMENTO FERROVIA
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px">
+      ${[
+        ['Vol. Carregado Teciap/Ultra',fmt(volCarreg),'m³ no mês','#f0a500'],
+        ['Contrato/Mês',fmt(contrato),'m³','#f0a500'],
+        ['Saldo Contrato',fmt(saldo),'m³',saldo<0?'#b91c1c':'#1a6b35'],
+        ['Vol. Projetado',fmt(projetado),'m³ estimado','#1a6b35'],
+        ['Média/dia',fmt(media),'m³/dia','#1a3a6b'],
+      ].map(([l,v,s,c])=>`
+        <div style="background:#fff;border:1px solid #cdd5e8;border-radius:8px;padding:10px;border-top:3px solid ${c}">
+          <div style="font-size:9px;font-weight:600;color:#6b7a99;text-transform:uppercase;margin-bottom:4px">${l}</div>
+          <div style="font-family:'Barlow Condensed';font-size:18px;font-weight:700;color:${c}">${v}</div>
+          <div style="font-size:9px;color:#9aa3bb">${s}</div>
+        </div>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
+      ${[
+        ['Vol. Mínimo Rumo',fmt(minimo),'m³/mês','#f0a500'],
+        ['Saldo Mínimo',fmt(saldoMin),'m³',saldoMin<0?'#b91c1c':'#1a6b35'],
+        ['Previsão Custo Ferrovia','R$ '+(custo.toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0})),`${fmt(volCarreg)} m³ × R$ ${tarifaFerro.toFixed(2)}/m³`,'#7a5200'],
+        ['Trânsito Ferroviário',fmt((db.transitoFerro||[]).reduce((s,r)=>s+r.pesoLiq,0)/1000),'m³ previsto','#1a3a6b'],
+      ].map(([l,v,s,c])=>`
+        <div style="background:#fff;border:1px solid #cdd5e8;border-radius:8px;padding:10px;border-top:3px solid ${c}">
+          <div style="font-size:9px;font-weight:600;color:#6b7a99;text-transform:uppercase;margin-bottom:4px">${l}</div>
+          <div style="font-family:'Barlow Condensed';font-size:18px;font-weight:700;color:${c}">${v}</div>
+          <div style="font-size:9px;color:#9aa3bb">${s}</div>
+        </div>`).join('')}
+    </div>
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#1a3a6b;margin-bottom:8px;border-bottom:2px solid #1a3a6b;padding-bottom:4px">
+      Carregamento por Destino — ${curMonth}
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:10px">
+        <thead><tr style="background:#1a3a6b;color:#fff">
+          <th style="padding:5px 6px;text-align:left">Data</th>
+          ${clientesList.map(c=>`<th style="padding:5px 6px;text-align:right">${c}</th>`).join('')}
+          <th style="padding:5px 6px;text-align:right">Total</th>
+        </tr></thead>
+        <tbody>${rows}${totRow}</tbody>
+      </table>
+    </div>`;
+}
+
+async function renderTopHTML(container) {
+  const curY = parseInt(getCurMonth().split('-')[0]);
+  const notas=db.notas.filter(r=>r.modal==='Ferroviário');
+  const monthlyVol=m=>{
+    const pad=String(m+1).padStart(2,'0');
+    return notas.filter(r=>r.data&&r.data.startsWith(`${curY}-${pad}`)).reduce((s,r)=>s+r.qtde,0)/1000;
+  };
+  const getContrato=m=>{const mk=curY+'-'+String(m+1).padStart(2,'0');return (db.configHist[mk]||{}).ferro?.contrato||88350;};
+  const getMinimo=m=>{const mk=curY+'-'+String(m+1).padStart(2,'0');const cfg=(db.configHist[mk]||{}).ferro;if(cfg?.minimo)return cfg.minimo;if(cfg?.contrato)return Math.round(cfg.contrato*.95);return 83933;};
+
+  const buildTableHTML=(months,color)=>{
+    let html='',tf=0,tMin=0,tCon=0;
+    months.forEach(m=>{
+      const fat=monthlyVol(m),mn=getMinimo(m),cn=getContrato(m);
+      tf+=fat;tMin+=mn;tCon+=cn;
+      const im=mn?Math.round(fat/mn*100):0,ic=cn?Math.round(fat/cn*100):0;
+      const pc=im>=100?'#1a6b35':im>=80?'#f0a500':'#b91c1c';
+      html+=`<tr><td style="padding:4px 8px;border-bottom:1px solid #cdd5e8">${MONTHS[m]}</td>
+        <td style="text-align:right;padding:4px 8px;border-bottom:1px solid #cdd5e8;font-weight:600;color:#1a3a6b">${fat?fmt(fat):'-'}</td>
+        <td style="text-align:right;padding:4px 8px;border-bottom:1px solid #cdd5e8">${fmt(mn)}</td>
+        <td style="text-align:right;padding:4px 8px;border-bottom:1px solid #cdd5e8;font-weight:700;color:${pc}">${fat?im+'%':'-'}</td>
+        <td style="text-align:right;padding:4px 8px;border-bottom:1px solid #cdd5e8">${fmt(cn)}</td>
+        <td style="text-align:right;padding:4px 8px;border-bottom:1px solid #cdd5e8;font-weight:700;color:${pc}">${fat?ic+'%':'-'}</td>
+      </tr>`;
+    });
+    if(months.length>1){
+      const ti=tMin?Math.round(tf/tMin*100):0;const pc=ti>=100?'#1a6b35':ti>=80?'#f0a500':'#b91c1c';
+      html+=`<tr style="background:#e8eef8;font-weight:700"><td style="padding:4px 8px">Total</td>
+        <td style="text-align:right;padding:4px 8px;color:#1a3a6b">${tf?fmt(tf):'-'}</td>
+        <td style="text-align:right;padding:4px 8px">${fmt(tMin)}</td>
+        <td style="text-align:right;padding:4px 8px;color:${pc}">${tf?ti+'%':'-'}</td>
+        <td style="text-align:right;padding:4px 8px">${fmt(tCon)}</td>
+        <td style="text-align:right;padding:4px 8px;color:${pc}">${tf?Math.round(tf/tCon*100)+'%':'-'}</td>
+      </tr>`;
+    }
+    return html;
+  };
+  const thStyle=`style="background:#1a3a6b;color:#fff;padding:5px 8px;text-align:right;font-size:10px;font-weight:600"`;
+  const thL=`style="background:#1a3a6b;color:#fff;padding:5px 8px;text-align:left;font-size:10px;font-weight:600"`;
+  const tHead=`<thead><tr><th ${thL}>Mês</th><th ${thStyle}>Faturado</th><th ${thStyle}>Mín.Contratual</th><th ${thStyle}>Índice</th><th ${thStyle}>Contrato</th><th ${thStyle}>Índice</th></tr></thead>`;
+
+  container.innerHTML += `
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:800;color:#1a3a6b;margin-bottom:16px">
+      TAKE OR PAY FERROVIA — ${curY}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+      <div>
+        <div style="font-size:12px;font-weight:700;color:#1a3a6b;margin-bottom:8px;border-bottom:2px solid #1a3a6b;padding-bottom:4px">ANUAL</div>
+        <table style="width:100%;border-collapse:collapse;font-size:11px">${tHead}<tbody>${buildTableHTML([0,1,2,3,4,5,6,7,8,9,10,11])}</tbody></table>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:16px">
+        ${[['1º Trimestre',[0,1,2]],['2º Trimestre',[3,4,5]],['3º Trimestre',[6,7,8]],['4º Trimestre',[9,10,11]]].map(([label,months])=>`
+          <div>
+            <div style="font-size:12px;font-weight:700;color:#1a3a6b;margin-bottom:6px;border-bottom:2px solid #1a3a6b;padding-bottom:4px">${label}</div>
+            <table style="width:100%;border-collapse:collapse;font-size:10px">${tHead}<tbody>${buildTableHTML(months)}</tbody></table>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
 })();
 </script>
 </body>
