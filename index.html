@@ -2518,7 +2518,7 @@ async function gerarPDF() {
     }
 
     // ── BAR CHART renderer ──
-    function drawBarChart(x,y,w,h,labels,datasets,unit) {
+    function drawBarChart(x,y,w,h,labels,datasets,unit,showLabels) {
       // Background
       pdf.setFillColor(250,252,255); setDraw('#cdd5e8'); pdf.setLineWidth(0.3);
       pdf.rect(x,y,w,h,'FD');
@@ -2529,7 +2529,7 @@ async function gerarPDF() {
       if(!maxVal) return;
       maxVal = Math.ceil(maxVal/1000)*1000;
 
-      const padL=18, padB=14, padT=6, padR=4;
+      const padL=18, padB=12, padT=8, padR=4; // padT=8 gives room for value labels above bars
       const chartX=x+padL, chartY=y+padT, chartW=w-padL-padR, chartH=h-padT-padB;
 
       // Y axis gridlines & labels
@@ -2569,22 +2569,19 @@ async function gerarPDF() {
         pdf.text(lbl, bx+barW/2, chartY+chartH+4, {align:'center'});
       });
 
-      // Value labels on top bars (only if few bars)
-      if(labels.length<=20){
-        datasets.forEach((ds,di)=>{
-          labels.forEach((lbl,i)=>{
-            const val=ds.data[i]||0; if(!val) return;
-            let stackedBelow=0;
-            if(isStacked) for(let d2=0;d2<di;d2++) stackedBelow+=datasets[d2].data[i]||0;
-            const bx=chartX+i*barGroupW+gapW;
-            const topY=chartY+chartH-((val+stackedBelow)/maxVal)*chartH;
-            setTxt('#1a2340'); pdf.setFontSize(4.5);
-            const fmtV=val>=1000?(val/1000).toFixed(1)+'k':val.toFixed(0);
-            if(di===datasets.length-1)
-              pdf.text(fmtV, bx+barW/2, topY-0.8, {align:'center'});
-          });
-        });
-      }
+      // Value labels on top of each full bar stack
+      // Compute total per bar (sum of all datasets)
+      const fontSize = labels.length > 25 ? 4 : labels.length > 18 ? 4.5 : 5;
+      labels.forEach((lbl,i)=>{
+        const total = datasets.reduce((s,ds)=>(s + (ds.data[i]||0)),0);
+        if(!total) return;
+        const bx = chartX + i*barGroupW + gapW;
+        const topY = chartY + chartH - (total/maxVal)*chartH;
+        // Value label above bar
+        const fmtV = total>=1000 ? (total/1000).toFixed(1)+'k' : total.toFixed(0);
+        setTxt('#1a2340'); pdf.setFont('helvetica','bold'); pdf.setFontSize(fontSize);
+        pdf.text(fmtV, bx+barW/2, topY-1, {align:'center'});
+      });
 
       // Legend
       if(datasets.length>1){
@@ -2673,65 +2670,70 @@ async function gerarPDF() {
       const k2W=(W-2*M)/kpis2.length, k2Y=kpiY+kpiH+2;
       kpis2.forEach(([ac,lb,vl,sb],i)=>drawKpi(M+i*k2W, k2Y, k2W-1, kpiH, ac, lb, vl, sb));
 
-      // ── CHART: Descarga Rodoviária ──
+      // ── CHART: Descarga Rodoviária — full width ──
       const days=Array.from({length:diasMes},(_,i)=>i+1);
-      const lbl30=days.map(d=>d+'/'+String(cm2).padStart(2,'0'));
+      const lbl30=days.map(d=>d+'/'+String(cm2).padStart(2,'00'));
       const sinopD=days.map(d=>descMes.filter(r=>new Date(r.data+'T12:00:00').getDate()===d&&r.filial==='Sinop').reduce((s,r)=>s+r.pesoDst,0)/1000||null);
       const nmD=days.map(d=>descMes.filter(r=>new Date(r.data+'T12:00:00').getDate()===d&&r.filial==='Nova Mutum').reduce((s,r)=>s+r.pesoDst,0)/1000||null);
 
-      const chartTop=k2Y+kpiH+3;
-      const chartH2=60, chartW2=185;
+      const chartTop=k2Y+kpiH+4;
+      const chartW2=W-2*M; // full width
+      const chartH2=58;
+
+      // Chart title
+      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(8);
+      pdf.text('DESCARGA RODOVIÁRIA', M, chartTop-1);
+
+      // Draw full-width chart with value labels
       drawBarChart(M, chartTop, chartW2, chartH2, lbl30,
         [{label:'Sinop',data:sinopD,borderColor:'#1a3a6b'},{label:'Nova Mutum',data:nmD,borderColor:'#f0a500'}],
-        'm³');
+        'm³', true); // true = show value labels
 
-      // Title above chart
-      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(8);
-      pdf.text('DESCARGA RODOVIÁRIA', M+2, chartTop-1);
+      // ── TABLES below chart — side by side ──
+      const tblY=chartTop+chartH2+5;
+      const tblHalf=(W-2*M)/2-3;
 
-      // ── TABLES: Carregamento Usina + Quebra Mensal ──
-      const tblX=M+chartW2+4, tblY=chartTop;
-      const tblW=W-M-tblX; // ~88mm
-      // Compact column widths for narrow table
-      const usColW = tblW/5;
-
-      // Carregamento Usina
-      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(7);
-      pdf.text('CARREGAMENTO USINA', tblX, tblY+3);
-      const usCols=[['',usColW*.15],['Data',usColW*.95],['Sinop',usColW*.9,'right'],['N.Mutum',usColW*.9,'right'],['Total',usColW*.8,'right']];
-      drawTableHeader(tblX, tblY+4, tblW, usCols, color);
+      // LEFT: Carregamento Usina
+      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5);
+      pdf.text('CARREGAMENTO USINA', M, tblY+3);
+      const usCols=[['',8],['Data',30],['Sinop',28,'right'],['N.Mutum',28,'right'],['Total',26,'right']];
+      drawTableHeader(M, tblY+4, tblHalf, usCols, color);
       const todayD2=new Date(today2+'T12:00:00');
+      let usTotal=[0,0];
       ['D','D-1','D-2','D-3'].forEach((lbl,i)=>{
         const dd=new Date(todayD2); dd.setDate(dd.getDate()-i);
         const ds=localDateStr(dd);
         const rows2=db.notas.filter(r=>r.clienteCod===clienteCod&&r.data===ds);
         const s2=rows2.filter(r=>r.filial==='Sinop').reduce((a,r)=>a+r.qtde,0)/1000;
         const n2=rows2.filter(r=>r.filial==='Nova Mutum').reduce((a,r)=>a+r.qtde,0)/1000;
-        const bg=i%2?'#f7f9fd':null;
-        pdf.setFontSize(6.5);
-        drawTableRow(tblX, tblY+10+i*5.5, tblW, usCols,
-          [lbl, fmtDate(ds), s2?fmt(s2):'-', n2?fmt(n2):'-', (s2+n2)?fmt(s2+n2):'-'], bg, '#1a2340');
+        usTotal[0]+=s2; usTotal[1]+=n2;
+        drawTableRow(M, tblY+10+i*6, tblHalf, usCols,
+          [lbl, fmtDate(ds), s2?fmt(s2):'-', n2?fmt(n2):'-', (s2+n2)?fmt(s2+n2):'-'],
+          i%2?'#f7f9fd':null, '#1a2340');
       });
+      drawTableRow(M, tblY+34, tblHalf, usCols,
+        ['Total','', fmt(usTotal[0]), fmt(usTotal[1]), fmt(usTotal[0]+usTotal[1])],
+        '#e8eef8','#1a3a6b');
 
-      // Quebra Mensal
-      const qY=tblY+35;
-      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(7);
-      pdf.text('QUEBRA MENSAL', tblX, qY+3);
-      const qColW = tblW/4;
-      const qCols=[['Filial',qColW*1.1],['Entrada m³',qColW*.95,'right'],['Quebra m³',qColW*.95,'right'],['Índice',qColW*.7,'right']];
-      drawTableHeader(tblX, qY+4, tblW, qCols, color);
+      // RIGHT: Quebra Mensal
+      const qX=M+tblHalf+6;
+      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5);
+      pdf.text('QUEBRA MENSAL', qX, tblY+3);
+      const qCols=[['Filial',45],['Entrada m³',38,'right'],['Quebra m³',35,'right'],['Índice',25,'right']];
+      drawTableHeader(qX, tblY+4, tblHalf, qCols, color);
       let totE=0,totQ=0;
       ['Sinop','Nova Mutum'].forEach((f,i)=>{
         const sub=descMes.filter(r=>r.filial===f);
         const ent=sub.reduce((s,r)=>s+r.pesoDst,0)/1000;
         const qbr=sub.reduce((s,r)=>s+(r.quebra||0),0)/1000;
         totE+=ent; totQ+=qbr;
-        drawTableRow(tblX, qY+10+i*5.5, tblW, qCols,
-          [f, fmt(ent), fmt(qbr), ent?(qbr/ent*100).toFixed(2)+'%':'-'], i%2?'#f7f9fd':null);
+        drawTableRow(qX, tblY+10+i*6, tblHalf, qCols,
+          [f, fmt(ent), fmt(qbr), ent?(qbr/ent*100).toFixed(2)+'%':'-'],
+          i%2?'#f7f9fd':null);
       });
-      drawTableRow(tblX, qY+21, tblW, qCols,
+      drawTableRow(qX, tblY+22, tblHalf, qCols,
         ['Total', fmt(totE), fmt(totQ), totE?(totQ/totE*100).toFixed(2)+'%':'-'],
-        '#e8eef8', '#1a3a6b');
+        '#e8eef8','#1a3a6b');
     }
 
     // ═══════════════════════════════════════════
