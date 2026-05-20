@@ -585,6 +585,18 @@ const MONTHS_SHORT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out
 // STATE
 // ============================================================
 let db = { descargas:[], transito:[], notas:[], estoque:[], config:{}, configHist:{}, produtoMap:{}, nfClienteMap:{} };
+
+// ── Helper: data local sem conversão UTC ──
+function localDateStr(d) {
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function localMonthStr(d) {
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+}
+function todayLocal() { return localDateStr(new Date()); }
+function curMonthLocal() { return localMonthStr(new Date()); }
+
+
 let currentTerminal = 'teciap';
 let pendingEstoqueMeta = null; // {produto, data}
 let charts = {};
@@ -595,16 +607,33 @@ let selectedMonth = null; // null = mês atual, 'YYYY-MM' = mês filtrado
 // ============================================================
 async function loadDB() {
   async function loadKey(key, defaultVal) {
-    // Tenta Firestore primeiro, cai no localStorage se offline ou não configurado
     if(window.db_fire) {
       try {
-        const snap = await db_fire.collection('empresas').doc(EMPRESA_ID).collection('dados').doc(key).get();
+        const base = db_fire.collection('empresas').doc(EMPRESA_ID).collection('dados');
+        // Tenta carregar em chunks primeiro (arrays grandes)
+        if(['descargas','transito','notas','estoque'].includes(key)) {
+          const metaSnap = await base.doc(key+'_meta').get();
+          if(metaSnap.exists) {
+            const {chunks} = metaSnap.data();
+            const chunkSnaps = await Promise.all(
+              Array.from({length:chunks},(_,ci)=>base.doc(key+'_chunk_'+ci).get())
+            );
+            const json = chunkSnaps.map(s=>s.data()?.chunk||'').join('');
+            if(json) {
+              const val = JSON.parse(json);
+              try { localStorage.setItem(DB_KEYS[key]||('op_'+key), JSON.stringify(val)); } catch(e){}
+              return val;
+            }
+          }
+        }
+        // Fallback: doc simples (config, maps, etc)
+        const snap = await base.doc(key).get();
         if(snap.exists) {
           const val = snap.data().value || defaultVal;
-          localStorage.setItem(DB_KEYS[key]||('op_'+key), JSON.stringify(val));
+          try { localStorage.setItem(DB_KEYS[key]||('op_'+key), JSON.stringify(val)); } catch(e){}
           return val;
         }
-      } catch(e) { console.warn('Firestore read error:', e.message); }
+      } catch(e) { console.warn('Firestore read error:', key, e.message); }
     }
     try { return JSON.parse(localStorage.getItem(DB_KEYS[key]||('op_'+key)) || JSON.stringify(defaultVal)); }
     catch(e) { return defaultVal; }
@@ -632,19 +661,41 @@ async function loadDB() {
   const lu=localStorage.getItem('op_lastupdate');
   if(lu) document.getElementById('lastUpdate').textContent=lu;
 }
+const CHUNK_KEYS = ['descargas','transito','notas','estoque']; // arrays que podem ser grandes
+const MAX_CHUNK_BYTES = 400000; // 400KB por chunk (safe under Firestore 1MB limit)
+
 async function saveDB(key) {
   const value = db[key];
   // Sempre salva no localStorage como cache
-  if(DB_KEYS[key]) localStorage.setItem(DB_KEYS[key], JSON.stringify(value));
+  if(DB_KEYS[key]) { try { localStorage.setItem(DB_KEYS[key], JSON.stringify(value)); } catch(e){} }
   const now = new Date().toLocaleString('pt-BR');
   localStorage.setItem('op_lastupdate', now);
   document.getElementById('lastUpdate').textContent = now;
   // Salva no Firestore se configurado
   if(window.db_fire) {
     try {
-      const base = db_fire.collection('empresas').doc(EMPRESA_ID);
-      await base.collection('dados').doc(key).set({value, updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
-      await base.collection('dados').doc('_meta').set({lastUpdate:now},{merge:true});
+      const base = db_fire.collection('empresas').doc(EMPRESA_ID).collection('dados');
+      if(CHUNK_KEYS.includes(key) && Array.isArray(value)) {
+        // Salvar em chunks para evitar limite de 1MB do Firestore
+        const json = JSON.stringify(value);
+        const chunks = [];
+        for(let i=0; i<json.length; i+=MAX_CHUNK_BYTES) chunks.push(json.slice(i,i+MAX_CHUNK_BYTES));
+        // Salva todos os chunks em paralelo
+        const saves = chunks.map((chunk, ci) => base.doc(key+'_chunk_'+ci).set({chunk, ci, total:chunks.length}));
+        saves.push(base.doc(key+'_meta').set({chunks:chunks.length, updatedAt:firebase.firestore.FieldValue.serverTimestamp()}));
+        await Promise.all(saves);
+        // Remove chunks antigos se a nova versão tem menos
+        const oldMeta = await base.doc(key+'_meta').get();
+        if(oldMeta.exists) {
+          const oldTotal = oldMeta.data().chunks || 0;
+          const deletes = [];
+          for(let ci=chunks.length; ci<oldTotal; ci++) deletes.push(base.doc(key+'_chunk_'+ci).delete());
+          if(deletes.length) await Promise.all(deletes);
+        }
+      } else {
+        await base.doc(key).set({value, updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+      }
+      await base.doc('_meta').set({lastUpdate:now},{merge:true});
     } catch(e) { console.warn('Firestore write error (salvo localmente):', e.message); }
   }
 }
@@ -663,7 +714,7 @@ function getAvailableMonths() {
 
 function buildMonthFilter() {
   const months = getAvailableMonths();
-  const now = new Date().toISOString().substring(0,7);
+  const now = curMonthLocal();
   if(!selectedMonth || !months.includes(selectedMonth))
     selectedMonth = months.includes(now) ? now : (months[months.length-1] || now);
 
@@ -697,7 +748,7 @@ function buildMonthFilter() {
   }
 }
 
-function getCurMonth() { return selectedMonth || new Date().toISOString().substring(0,7); }
+function getCurMonth() { return selectedMonth || curMonthLocal(); }
 
 function refreshCurrentPage() {
   const active = document.querySelector('.page.active');
@@ -796,7 +847,7 @@ function handleFile(e, type) {
 function triggerEstoqueModal(e) {
   e.stopPropagation();
   document.getElementById('modalProduto').value = '';
-  document.getElementById('modalData').value = new Date().toISOString().split('T')[0];
+  document.getElementById('modalData').value = todayLocal();
   document.getElementById('modalEstoque').classList.add('open');
 }
 function handleFileEstoque(e) {
@@ -968,7 +1019,7 @@ function processTransito(rows) {
     const transit=f===3?1:2;
     const dtEmissao=parseExcelDate(r[emissaoIdx]);
     let prevChegada=null;
-    if(dtEmissao){const d=new Date(dtEmissao+'T12:00:00');d.setDate(d.getDate()+transit);prevChegada=d.toISOString().split('T')[0];}
+    if(dtEmissao){const d=new Date(dtEmissao+'T12:00:00');d.setDate(d.getDate()+transit);prevChegada=localDateStr(d);}
     const plRaw=r[pesoLiqIdx];const pesoLiq=typeof plRaw==='number'?plRaw:parseFloat(String(plRaw||'0').replace(/\./g,'').replace(',','.'));
     const terminal=Object.keys(TERMINAL_MAP).find(t=>TERMINAL_MAP[t].cod.includes(cliente))||'teciap';
     db.transito.push({nf,cliente,terminal,filial,pesoLiq,dtEmissao,prevChegada});
@@ -1108,7 +1159,7 @@ function renderTerminal(t) {
   const cfg      = db.config[t] || {};
   const color    = TERMINAL_MAP[t].color;
   const curMonth = getCurMonth();
-  const today    = new Date().toISOString().split('T')[0];
+  const _dn=new Date(); const today=_dn.getFullYear()+'-'+String(_dn.getMonth()+1).padStart(2,'0')+'-'+String(_dn.getDate()).padStart(2,'0');
   const [cy, cm] = curMonth.split('-').map(Number);
   const diasMes  = new Date(cy, cm, 0).getDate();
   const isCurrentMonth = curMonth === today.substring(0, 7);
@@ -1426,12 +1477,13 @@ function renderTransitoTables(t, today) {
   }
 
   // Carregamento Usina: D, D-1, D-2, D-3 das DESCARGAS
-  const pastDays = [today, ...[-1,-2,-3].map(o=>{const d=new Date(todayD);d.setDate(d.getDate()+o);return d.toISOString().split('T')[0];})];
+  const pastDays = [today, ...[-1,-2,-3].map(o=>{const d=new Date(todayD);d.setDate(d.getDate()+o);return localDateStr(d);})];
   buildRows(pastDays, ['D','D-1','D-2','D-3'], 'tbodyTransitoDesc', descByDate);
 
-  // Data Prevista: D+1, D+2 do TRÂNSITO (prevChegada futura)
-  const futDays = [[1,'D+1'],[2,'D+2']].map(([o,l])=>{const d=new Date(todayD);d.setDate(d.getDate()+o);return{date:d.toISOString().split('T')[0],label:l};});
-  buildRows(futDays.map(x=>x.date), futDays.map(x=>x.label), 'tbodyTransitoFut', transitByDate);
+  // Data Prevista: D (hoje pendente), D+1, D+2
+  const futLabels=['D','D+1','D+2'];
+  const futDates=[0,1,2].map(o=>{const d=new Date(todayD);d.setDate(d.getDate()+o);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');});
+  buildRows(futDates, futLabels, 'tbodyTransitoFut', transitByDate);
 
   // Atrasado: TRÂNSITO com prevChegada < hoje
   const atrasados = {};
@@ -1477,7 +1529,7 @@ function renderQuebraMensal(t, curMonth) {
 // ============================================================
 function renderFerrovia() {
   const curMonth = getCurMonth();
-  const today    = new Date().toISOString().split('T')[0];
+  const _dn=new Date(); const today=_dn.getFullYear()+'-'+String(_dn.getMonth()+1).padStart(2,'0')+'-'+String(_dn.getDate()).padStart(2,'0');
   const [cy, cm] = curMonth.split('-').map(Number);
   const diasMes  = new Date(cy, cm, 0).getDate();
   const isCurrentMonth = curMonth === today.substring(0,7);
@@ -1514,9 +1566,9 @@ function renderFerrovia() {
     : descFerroAll.filter(r => r.terminal === 'rumo_' + ferroDestSel);
   const volDescFerro = descFerro.reduce((s,r) => s+r.pesoDst, 0) / 1000;
 
-  const cfg      = db.config.ferro || {};
-  const contrato = cfg.contrato || 88350;
-  const minimo   = cfg.minimo   || 83933;
+  const cfgFerroMes = (db.configHist[curMonth]||{}).ferro || db.config.ferro || {};
+  const contrato = cfgFerroMes.contrato || 88350;
+  const minimo   = cfgFerroMes.minimo   || Math.round(contrato * 0.95);
   const saldo    = volCarreg - contrato;
 
   // ── MÉDIA/DIA FERROVIA: corte D-1 (dados até fim do dia anterior) ──
@@ -1794,9 +1846,9 @@ function buildMesRefSelect() {
   const currentSelected = sel.value || cur;
   // Gera últimos 24 meses + próximos 3
   const opts = [];
-  const base = new Date();
+  const _base = new Date();
   for(let i = -2; i <= 24; i++) {
-    const d = new Date(base.getFullYear(), base.getMonth() - i, 1);
+    const d = new Date(_base.getFullYear(), _base.getMonth() - i, 1);
     const val = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
     opts.push(val);
   }
@@ -1938,7 +1990,22 @@ async function deleteFromFirestore(keys) {
   if(!window.db_fire || !window.EMPRESA_ID) return;
   try {
     const base = db_fire.collection('empresas').doc(EMPRESA_ID).collection('dados');
-    await Promise.all(keys.map(k => base.doc(k).delete()));
+    const deletes = [];
+    for(const k of keys) {
+      deletes.push(base.doc(k).delete());
+      // Apagar chunks se existirem
+      if(['descargas','transito','notas','estoque'].includes(k)) {
+        try {
+          const meta = await base.doc(k+'_meta').get();
+          if(meta.exists) {
+            const {chunks} = meta.data();
+            for(let ci=0; ci<chunks; ci++) deletes.push(base.doc(k+'_chunk_'+ci).delete());
+            deletes.push(base.doc(k+'_meta').delete());
+          }
+        } catch(e) {}
+      }
+    }
+    await Promise.all(deletes);
   } catch(e) {
     console.warn('Erro ao apagar do Firestore:', e.message);
   }
