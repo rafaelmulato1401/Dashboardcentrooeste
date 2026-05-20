@@ -331,25 +331,51 @@
   <div class="section-title">Monitoramento <span class="gold-accent">Ferrovia</span></div>
   <div class="gold-bar"></div>
   <div class="ferro-kpi-row" id="ferroKpiRow"></div>
+  <!-- FILTRO ÚNICO para os 3 gráficos -->
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding:10px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:10px">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">Filtrar Destino:</div>
+    <select id="ferroDestSelect" onchange="renderFerrovia()"
+      style="background:var(--bg3);border:1.5px solid var(--border);border-radius:7px;
+             padding:6px 14px;font-size:12px;color:var(--text);font-family:'Barlow',sans-serif;cursor:pointer;min-width:240px;">
+      <option value="geral">🌐 Geral (todos os destinos)</option>
+      <option value="11966">Logum Logística SA (11966)</option>
+      <option value="7605">Terminal Paulínia SA (7605)</option>
+      <option value="3492">Destino 3492</option>
+    </select>
+    <div style="font-size:10px;color:var(--text3)">Aplica nos 3 gráficos abaixo</div>
+  </div>
+
   <div style="display:grid;grid-template-columns:1fr 420px;gap:16px">
     <div class="charts-col">
+      <!-- Gráfico 1: Carregamento Ferroviário (das Notas Fiscais) -->
       <div class="card">
-        <div class="card-title">Carregamento Ferroviário — <span>Teciap / Ultracargo</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div class="card-title" style="margin-bottom:0">Carregamento Ferroviário — <span>Teciap / Ultracargo</span></div>
+          <div id="ferroCarregLegend" style="font-size:10px;color:var(--text2)"></div>
+        </div>
         <div class="chart-wrap"><canvas id="chartFerroCarreg"></canvas></div>
       </div>
+      <!-- Gráfico 2: Descarga Ferroviária (das Descargas, Rumo) -->
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
           <div class="card-title" style="margin-bottom:0">Descarga Ferroviária — <span>Terminais</span></div>
-          <select id="ferroDestSelect" onchange="renderFerrovia()"
-            style="background:var(--bg3);border:1.5px solid var(--border);border-radius:7px;
-                   padding:5px 12px;font-size:12px;color:var(--text);font-family:'Barlow',sans-serif;cursor:pointer;min-width:220px;">
-            <option value="geral">🌐 Geral (todos)</option>
-            <option value="11966">Logum Logística SA (11966)</option>
-            <option value="7605">Terminal Paulínia SA (7605)</option>
-            <option value="3492">Destino 3492</option>
-          </select>
+          <div id="ferroDescLegend" style="font-size:10px;color:var(--text2)"></div>
         </div>
         <div class="chart-wrap"><canvas id="chartFerroDesc"></canvas></div>
+      </div>
+      <!-- Gráfico 3: Previsão Descarga (do Trânsito Rumo, +5 dias) -->
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div class="card-title" style="margin-bottom:0">Previsão Descarga <span>nos Terminais</span></div>
+          <div style="font-size:10px;color:var(--text2)">Trânsito Rumo + 5 dias</div>
+        </div>
+        <div class="chart-wrap"><canvas id="chartFerroDescPrev"></canvas></div>
+        <div style="overflow-x:auto;margin-top:10px">
+          <table class="mini-table" id="ferroDescPrevTable">
+            <thead id="ferroDescPrevHead"><tr><th>Previsão</th><th>Data</th><th>Logum</th><th>Paulínia</th><th>Total</th></tr></thead>
+            <tbody id="ferroDescPrevBody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
     <div class="card">
@@ -571,7 +597,7 @@
 // ============================================================
 // CONSTANTS
 // ============================================================
-const DB_KEYS = { descargas:'op_descargas', transito:'op_transito', notas:'op_notas', estoque:'op_estoque', config:'op_config', configHist:'op_config_hist', produtoMap:'op_produto_map', nfClienteMap:'op_nf_cliente_map' };
+const DB_KEYS = { descargas:'op_descargas', transito:'op_transito', notas:'op_notas', estoque:'op_estoque', transitoFerro:'op_transito_ferro', config:'op_config', configHist:'op_config_hist', produtoMap:'op_produto_map', nfClienteMap:'op_nf_cliente_map' };
 const TERMINAL_MAP = {
   teciap: {cod:[3490],   dep:[17],          name:'Teciap',        color:'#1a3a6b'},
   ultra:  {cod:[83868],  dep:[0.35,0.34],   name:'Ultracargo RO', color:'#0e6674'},
@@ -584,7 +610,7 @@ const MONTHS_SHORT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out
 // ============================================================
 // STATE
 // ============================================================
-let db = { descargas:[], transito:[], notas:[], estoque:[], config:{}, configHist:{}, produtoMap:{}, nfClienteMap:{} };
+let db = { descargas:[], transito:[], notas:[], estoque:[], transitoFerro:[], config:{}, configHist:{}, produtoMap:{}, nfClienteMap:{} };
 
 // ── Helper: data local sem conversão UTC ──
 function localDateStr(d) {
@@ -639,8 +665,8 @@ async function loadDB() {
     catch(e) { return defaultVal; }
   }
 
-  [db.descargas, db.transito, db.notas, db.estoque] = await Promise.all([
-    loadKey('descargas',[]), loadKey('transito',[]), loadKey('notas',[]), loadKey('estoque',[]),
+  [db.descargas, db.transito, db.notas, db.estoque, db.transitoFerro] = await Promise.all([
+    loadKey('descargas',[]), loadKey('transito',[]), loadKey('notas',[]), loadKey('estoque',[]), loadKey('transitoFerro',[]),
   ]);
   db.config       = await loadKey('config',{});
   db.configHist   = await loadKey('configHist',{});
@@ -898,7 +924,7 @@ function processFile(file, type) {
       const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:''});
       let added=0, skipped=0;
       if(type==='descargas') ({added,skipped}=processDescargas(rows));
-      else if(type==='transito') ({added,skipped}=processTransito(rows));
+      else if(type==='transito') { ({added,skipped}=processTransito(rows)); processTransitoFerro(rows); }
       else if(type==='notas') ({added,skipped}=processNotas(rows));
       saveDB(type);
       if(type==='notas') { saveDB('produtoMap').catch(()=>{}); saveDB('nfClienteMap').catch(()=>{}); }
@@ -1026,6 +1052,48 @@ function processTransito(rows) {
     added++;
   }
   return {added,skipped};
+}
+
+// ============================================================
+// PROCESS TRANSITO FERRO (Rumo para terminais 7605, 11966, 3492)
+// ============================================================
+function processTransitoFerro(rows) {
+  // Header auto-detect
+  let hdr=null, dataStartTF=2;
+  for(let hi=0;hi<Math.min(5,rows.length);hi++){
+    const row=rows[hi]; if(!row||!Array.isArray(row)) continue;
+    const rs=row.map(v=>String(v||'')).join(',');
+    if(rs.includes('Nº Nota')||rs.includes('Nr. Nota')||rs.includes('Cliente')){hdr=row;dataStartTF=hi+1;break;}
+  }
+  if(!hdr) return;
+  const cols={}; hdr.forEach((c,i)=>{if(c)cols[String(c).trim()]=i;});
+  const clienteIdx=cols['Cliente'], emissaoIdx=cols['Dt. Emissão'];
+  const pesoLiqIdx=cols['Peso Líquido'], fIdx=cols['F'];
+  const nomeTranspIdx = 17; // col 17 = Nome transportador
+  const RUMO_FERRO_CODS = [7605, 11966, 3492];
+  const existing = new Set(db.transitoFerro.map(r=>r.nf+'_'+r.clienteCod));
+  let added=0;
+  for(let i=dataStartTF;i<rows.length;i++){
+    const r=rows[i];
+    const clienteRaw=r[clienteIdx];
+    const clienteCod=typeof clienteRaw==='number'?clienteRaw:parseFloat(String(clienteRaw||'0'));
+    if(!RUMO_FERRO_CODS.includes(clienteCod)) continue;
+    const nomeTransp=String(r[nomeTranspIdx]||'').trim().toUpperCase();
+    if(!nomeTransp.includes('RUMO')) continue;
+    const nfRaw=r[cols['Nº Nota']]; const nf=nfRaw?String(nfRaw).trim():'';
+    const key=nf+'_'+clienteCod;
+    if(existing.has(key)) continue;
+    existing.add(key);
+    const dtEmissao=parseExcelDate(r[emissaoIdx]);
+    let prevChegada=null;
+    if(dtEmissao){const d=new Date(dtEmissao+'T12:00:00');d.setDate(d.getDate()+5);prevChegada=localDateStr(d);}
+    const fRaw=r[fIdx];const f=typeof fRaw==='number'?fRaw:parseInt(fRaw)||1;
+    const pesoLiqRaw=r[pesoLiqIdx];
+    const pesoLiq=typeof pesoLiqRaw==='number'?pesoLiqRaw:parseFloat(String(pesoLiqRaw||'0').replace(/\./g,'').replace(',','.'))||0;
+    db.transitoFerro.push({nf,clienteCod,f,pesoLiq,data:dtEmissao,prevChegada});
+    added++;
+  }
+  if(added>0) saveDB('transitoFerro').catch(()=>{});
 }
 
 // ============================================================
@@ -1660,25 +1728,68 @@ function renderFerrovia() {
   const labels = days.map(d=>`${d}/${String(cm).padStart(2,'0')}`);
 
   // Gráfico 1: Carregamento ferroviário (Teciap + Ultra) por dia
-  const ferroByDay = days.map(d =>
-    ferroNotas.filter(r => new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000 || null
-  );
-  renderBarWithLabels('chartFerroCarreg', labels, ferroByDay, '#f0a500', 'm³');
+  // ── Mapa de destinos: código -> cor e label ──
+  const DEST_MAP = {
+    11966: { label:'Logum Logística', color:'#1a3a6b' },
+    7605:  { label:'Terminal Paulínia', color:'#f0a500' },
+    3492:  { label:'Destino 3492', color:'#1a6b35' },
+  };
+  const DEST_CODS = [11966, 7605, 3492];
 
-  // Gráfico 2: Descarga ferroviária — stacked por produto (Hidratado/Anidro)
+  // ── GRÁFICO 1: Carregamento Ferroviário (Notas Fiscais - Teciap+Ultra) ──
+  // Filtrado pelo destino selecionado via clienteCod nas notas
+  const ferroNotasFilt = ferroDestSel === 'geral'
+    ? ferroNotas
+    : ferroNotas.filter(r => {
+        // Filter by nomeCliente containing the dest name
+        const destCod = parseInt(ferroDestSel);
+        const destLabel = DEST_MAP[destCod]?.label.toUpperCase().split(' ')[0] || '';
+        return (r.nomeCliente||'').toUpperCase().includes(destLabel);
+      });
+
+  if(ferroDestSel === 'geral') {
+    // Stacked por destino (Logum azul, Paulínia dourado)
+    const ferroDatasets = DEST_CODS.map(cod => {
+      const destLabel = DEST_MAP[cod].label.toUpperCase().split(' ')[0];
+      return {
+        label: DEST_MAP[cod].label,
+        data: days.map(d => ferroNotas.filter(r =>
+          new Date(r.data+'T12:00:00').getDate()===d &&
+          (r.nomeCliente||'').toUpperCase().includes(destLabel)
+        ).reduce((s,r)=>s+r.qtde,0)/1000 || null),
+        backgroundColor: DEST_MAP[cod].color+'cc',
+        borderColor: DEST_MAP[cod].color,
+        borderWidth:1, borderRadius:3, stack:'fc'
+      };
+    }).filter(ds => ds.data.some(v=>v));
+    if(ferroDatasets.length) renderStackedBar('chartFerroCarreg', labels, ferroDatasets, 'm³');
+    else renderBarWithLabels('chartFerroCarreg', labels, days.map(()=>null), '#f0a500', 'm³');
+  } else {
+    const destCod = parseInt(ferroDestSel);
+    const singleColor = DEST_MAP[destCod]?.color || '#f0a500';
+    const ferroByDay = days.map(d => ferroNotasFilt.filter(r => new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000 || null);
+    renderBarWithLabels('chartFerroCarreg', labels, ferroByDay, singleColor, 'm³');
+  }
+
+  // ── GRÁFICO 2: Descarga Ferroviária (Descargas com Rumo) — stacked por produto ──
+  // Filtrado por terminal de destino (terminal = 'rumo_11966', 'rumo_7605', etc.)
+  const descFerroFilt = ferroDestSel === 'geral'
+    ? descFerro
+    : descFerro.filter(r => r.terminal === 'rumo_'+ferroDestSel);
+
   const descFerroHidByDay = days.map(d => {
-    const rs = descFerro.filter(r => new Date(r.data+'T12:00:00').getDate()===d && r.produto==='Hidratado');
+    const rs = descFerroFilt.filter(r => new Date(r.data+'T12:00:00').getDate()===d && r.produto==='Hidratado');
     return rs.reduce((s,r)=>s+r.pesoDst,0)/1000 || null;
   });
   const descFerroAniByDay = days.map(d => {
-    const rs = descFerro.filter(r => new Date(r.data+'T12:00:00').getDate()===d && r.produto==='Anidro');
+    const rs = descFerroFilt.filter(r => new Date(r.data+'T12:00:00').getDate()===d && r.produto==='Anidro');
     return rs.reduce((s,r)=>s+r.pesoDst,0)/1000 || null;
   });
   const descFerroSemByDay = days.map(d => {
-    const rs = descFerro.filter(r => new Date(r.data+'T12:00:00').getDate()===d && !r.produto);
+    const rs = descFerroFilt.filter(r => new Date(r.data+'T12:00:00').getDate()===d && !r.produto);
     return rs.reduce((s,r)=>s+r.pesoDst,0)/1000 || null;
   });
-  const temProdFerro = descFerro.some(r => r.produto);
+  const temProdFerro = descFerroFilt.some(r => r.produto);
   if(temProdFerro) {
     const fdDatasets = [
       {label:'Hidratado', data:descFerroHidByDay, backgroundColor:'#1a3a6bcc', borderColor:'#1a3a6b', borderWidth:1, borderRadius:3, stack:'fd'},
@@ -1688,11 +1799,82 @@ function renderFerrovia() {
     renderStackedBar('chartFerroDesc', labels, fdDatasets, 'm³');
   } else {
     const descFerroByDay = days.map(d => {
-      const rs = descFerro.filter(r => new Date(r.data+'T12:00:00').getDate()===d);
+      const rs = descFerroFilt.filter(r => new Date(r.data+'T12:00:00').getDate()===d);
       return rs.reduce((s,r)=>s+r.pesoDst,0)/1000 || null;
     });
     renderBarWithLabels('chartFerroDesc', labels, descFerroByDay, '#1a3a6b', 'm³');
   }
+
+  // ── GRÁFICO 3: Previsão Descarga (Trânsito Rumo + 5 dias) — stacked por destino ──
+  const today2 = todayLocal();
+  const rumoTransit = (db.transitoFerro||[]);
+  const rumoFilt = ferroDestSel === 'geral'
+    ? rumoTransit
+    : rumoTransit.filter(r => String(r.clienteCod) === ferroDestSel);
+
+  // Build by day relative to today (D-3 to D+10)
+  const prevByDate = {};
+  rumoFilt.forEach(r => {
+    if(!r.prevChegada) return;
+    if(!prevByDate[r.prevChegada]) prevByDate[r.prevChegada] = {11966:0, 7605:0, 3492:0};
+    const cod = Number(r.clienteCod||0);
+    if(prevByDate[r.prevChegada][cod] !== undefined)
+      prevByDate[r.prevChegada][cod] += r.pesoLiq/1000;
+  });
+
+  const allPrevDates = Object.keys(prevByDate).sort();
+  // Build labels and datasets for prev chart (show relevant dates around today)
+  const prevLabels = [], prevDests = {11966:[], 7605:[], 3492:[]};
+  allPrevDates.forEach(date => {
+    const diff = Math.round((new Date(date+'T12:00:00') - new Date(today2+'T12:00:00'))/86400000);
+    if(diff < -5 || diff > 14) return;
+    const lbl = diff===0 ? 'D' : (diff>0 ? 'D+'+diff : 'D'+diff);
+    prevLabels.push(lbl);
+    DEST_CODS.forEach(cod => prevDests[cod].push(prevByDate[date][cod]||null));
+  });
+
+  if(ferroDestSel === 'geral') {
+    const prevDatasets = DEST_CODS.map(cod => ({
+      label: DEST_MAP[cod].label,
+      data: prevDests[cod],
+      backgroundColor: DEST_MAP[cod].color+'cc',
+      borderColor: DEST_MAP[cod].color,
+      borderWidth:1, borderRadius:3, stack:'fp'
+    })).filter(ds => ds.data.some(v=>v));
+    if(prevDatasets.length) renderStackedBar('chartFerroDescPrev', prevLabels, prevDatasets, 'm³');
+    else renderBarWithLabels('chartFerroDescPrev', prevLabels, prevLabels.map(()=>null), '#1a3a6b', 'm³');
+  } else {
+    const destCod = parseInt(ferroDestSel);
+    renderBarWithLabels('chartFerroDescPrev', prevLabels, prevDests[destCod]||[], DEST_MAP[destCod]?.color||'#1a3a6b', 'm³');
+  }
+
+  // Tabela de previsão
+  const today3 = todayLocal();
+  let ferroDescRows='', ft={11966:0,7605:0,3492:0,total:0};
+  if(allPrevDates.length===0) {
+    ferroDescRows='<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:12px">Sem dados — suba o arquivo de Trânsito</td></tr>';
+  } else {
+    allPrevDates.forEach(date=>{
+      const diff=Math.round((new Date(date+'T12:00:00')-new Date(today3+'T12:00:00'))/86400000);
+      if(diff<-5||diff>14) return;
+      const lbl=diff===0?'D':(diff>0?'D+'+diff:'D'+diff);
+      const v11=prevByDate[date][11966]||0, v76=prevByDate[date][7605]||0, vtot=v11+v76;
+      if(ferroDestSel!=='geral') {
+        const cod=parseInt(ferroDestSel);
+        const v=prevByDate[date][cod]||0;
+        ft[cod]+=v; ft.total+=v;
+        const rc=diff<0?'atrasado':diff===0?'today':'';
+        ferroDescRows+=`<tr class="${rc}"><td>${lbl}</td><td>${fmtDate(date)}</td><td colspan="2" style="text-align:center">${v?fmt(v):'-'}</td><td>${v?fmt(v):'-'}</td></tr>`;
+      } else {
+        ft[11966]+=v11; ft[7605]+=v76; ft.total+=vtot;
+        const rc=diff<0?'atrasado':diff===0?'today':'';
+        ferroDescRows+=`<tr class="${rc}"><td>${lbl}</td><td>${fmtDate(date)}</td><td>${v11?fmt(v11):'-'}</td><td>${v76?fmt(v76):'-'}</td><td>${vtot?fmt(vtot):'-'}</td></tr>`;
+      }
+    });
+    ferroDescRows+=`<tr><td>Total</td><td></td><td>${ft[11966]?fmt(ft[11966]):'-'}</td><td>${ft[7605]?fmt(ft[7605]):'-'}</td><td>${ft.total?fmt(ft.total):'-'}</td></tr>`;
+  }
+  const pbody=document.getElementById('ferroDescPrevBody');
+  if(pbody) pbody.innerHTML=ferroDescRows;
 
   // ── TABELA DINÂMICA por cliente/destino ──
   // Pegar todos os clientes únicos com volume no mês (das notas Teciap+Ultra ferro)
@@ -1751,6 +1933,8 @@ function renderFerrovia() {
   const ferroHead = document.getElementById('ferroDailyHead');
   if (ferroHead) ferroHead.innerHTML = theadHtml;
   document.getElementById('ferroDailyBody').innerHTML = tbodyHtml;
+
+
 }
 
 // ============================================================
@@ -2036,6 +2220,7 @@ async function clearData(type) {
     localStorage.removeItem(DB_KEYS.produtoMap);
     localStorage.removeItem(DB_KEYS.nfClienteMap);
   }
+  if(type==='transito') { db.transitoFerro=[]; await saveDB('transitoFerro'); }
 
   buildMonthFilter();
   renderLogs();
