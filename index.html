@@ -2759,26 +2759,17 @@ async function gerarPDF() {
 
       // KPIs
       const fKpis=[
-        ['#f0a500','Vol. Carregado
-Teciap/Ultra',fmt(volCarreg),'m³ no mês'],
-        ['#f0a500','Vol. Descarregado
-Rumo',fmt(db.descargas.filter(r=>r.terminal&&r.terminal.startsWith('rumo_')&&r.data&&r.data.startsWith(curM)).reduce((s,r)=>s+r.pesoDst,0)/1000),'m³ no mês'],
-        ['#f0a500','Contrato
-Transporte/Mês',fmt(contrato),'m³'],
-        [saldo<0?'#b91c1c':'#1a6b35','Saldo
-Contrato/Mês',fmt(Math.abs(saldo)),'m³'],
-        [backlog>=0?'#1a6b35':'#b91c1c','Backlog
-Carregamento',fmt(Math.abs(
+        ['#f0a500','Vol. Carregado Teciap/Ultra',fmt(volCarreg),'m³ no mês'],
+        ['#f0a500','Vol. Descarregado Rumo',fmt(db.descargas.filter(r=>r.terminal&&r.terminal.startsWith('rumo_')&&r.data&&r.data.startsWith(curM)).reduce((s,r)=>s+r.pesoDst,0)/1000),'m³ no mês'],
+        ['#f0a500','Contrato Transporte/Mês',fmt(contrato),'m³'],
+        [saldo<0?'#b91c1c':'#1a6b35','Saldo Contrato/Mês',fmt(Math.abs(saldo)),'m³'],
+        [backlog>=0?'#1a6b35':'#b91c1c','Backlog Carregamento',fmt(Math.abs(
           (()=>{let b=0,md=contrato/diasMes;for(let d=1;d<=diaD1;d++){const v=ferroNotas.filter(r=>new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000;b=v-md+(d===1?0:b);}return b;})()
         )),'m³'],
-        ['#1a6b35','Volume
-Projetado',fmt(projetado),'m³ estimado mês'],
-        ['#1a3a6b','Média
-Carregamento/dia',fmt(mediaF),'m³/dia'],
-        ['#f0a500','Volume
-Mínimo Rumo',fmt(minimo),'m³/mês'],
-        [saldoMin<0?'#b91c1c':'#1a6b35','Saldo
-Volume Mínimo',fmt(Math.abs(saldoMin)),'m³'],
+        ['#1a6b35','Volume Projetado',fmt(projetado),'m³ estimado mês'],
+        ['#1a3a6b','Média Carregamento/dia',fmt(mediaF),'m³/dia'],
+        ['#f0a500','Volume Mínimo Rumo',fmt(minimo),'m³/mês'],
+        [saldoMin<0?'#b91c1c':'#1a6b35','Saldo Volume Mínimo',fmt(Math.abs(saldoMin)),'m³'],
       ];
       const fkW=(W-2*M)/fKpis.length, fkH=24, fkY=15.5;
       fKpis.forEach(([ac,lb,vl,sb],i)=>drawKpi(M+i*fkW, fkY, fkW-1, fkH, ac, lb.replace('\n',' '), vl, sb));
