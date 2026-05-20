@@ -2763,9 +2763,7 @@ async function gerarPDF() {
         ['#f0a500','Vol. Descarregado Rumo',fmt(db.descargas.filter(r=>r.terminal&&r.terminal.startsWith('rumo_')&&r.data&&r.data.startsWith(curM)).reduce((s,r)=>s+r.pesoDst,0)/1000),'m³ no mês'],
         ['#f0a500','Contrato Transporte/Mês',fmt(contrato),'m³'],
         [saldo<0?'#b91c1c':'#1a6b35','Saldo Contrato/Mês',fmt(Math.abs(saldo)),'m³'],
-        [backlog>=0?'#1a6b35':'#b91c1c','Backlog Carregamento',fmt(Math.abs(
-          (()=>{let b=0,md=contrato/diasMes;for(let d=1;d<=diaD1;d++){const v=ferroNotas.filter(r=>new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000;b=v-md+(d===1?0:b);}return b;})()
-        )),'m³'],
+        (()=>{let bfk=0,mdf=contrato/diasMes;for(let d=1;d<=diaD1;d++){const v=ferroNotas.filter(r=>new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000;bfk=v-mdf+(d===1?0:bfk);}return [bfk>=0?'#1a6b35':'#b91c1c','Backlog Carregamento',fmt(Math.abs(bfk)),bfk>=0?'Acima do previsto':'Pendência'];})(),
         ['#1a6b35','Volume Projetado',fmt(projetado),'m³ estimado mês'],
         ['#1a3a6b','Média Carregamento/dia',fmt(mediaF),'m³/dia'],
         ['#f0a500','Volume Mínimo Rumo',fmt(minimo),'m³/mês'],
