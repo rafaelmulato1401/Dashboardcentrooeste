@@ -2004,7 +2004,8 @@ function renderFerrovia() {
 // ============================================================
 function renderTakeOrPay(){
   const curYear=parseInt(getCurMonth().split('-')[0]);
-  const notas=db.notas.filter(r=>r.modal==='Ferroviário');
+  // Take or Pay Ferrovia: apenas Teciap e Ultracargo (não Centroeste)
+  const notas=db.notas.filter(r=>r.modal==='Ferroviário'&&(r.terminal==='teciap'||r.terminal==='ultra'));
   const monthlyVol=m=>{
     const pad=String(m+1).padStart(2,'0');
     return notas.filter(r=>r.data&&r.data.startsWith(`${curYear}-${pad}`)).reduce((s,r)=>s+r.qtde,0)/1000;
@@ -2385,6 +2386,13 @@ window.gerarPDF    = gerarPDF;
     start();
   }
 
+
+  // Expose render functions for PDF generation
+  window.renderTerminalForPDF = renderTerminal;
+  window.renderFerroviaForPDF = renderFerrovia;
+  window.renderTakeOrPayForPDF = renderTakeOrPay;
+  window.showPageForPDF = showPage;
+
 })();
 
 // ============================================================
@@ -2415,12 +2423,13 @@ async function gerarPDF() {
   const progText = document.getElementById('pdfProgressText');
   const progBar  = document.getElementById('pdfProgressBar');
   progDiv.style.display = 'block';
-
   function setProgress(pct, txt) { progBar.style.width=pct+'%'; progText.textContent=txt; }
 
+  // Hide modal temporarily while capturing
+  document.getElementById('pdfOverlay').classList.remove('open');
+
   try {
-    setProgress(5, 'Carregando biblioteca PDF...');
-    // Load html2canvas + jsPDF dynamically
+    setProgress(5, 'Carregando bibliotecas...');
     await loadScriptIfNeeded('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
     await loadScriptIfNeeded('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
     const { jsPDF } = window.jspdf;
@@ -2428,7 +2437,6 @@ async function gerarPDF() {
     const pdf = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4' });
     const pageW = pdf.internal.pageSize.getWidth();
     const pageH = pdf.internal.pageSize.getHeight();
-    const margin = 10;
     let isFirstPage = true;
 
     const curMonthStr = getCurMonth();
@@ -2436,133 +2444,118 @@ async function gerarPDF() {
     const mesLabel = MONTHS[parseInt(cm)-1]+' / '+cy;
     const lastUpLabel = document.getElementById('lastUpdate').textContent;
 
-    // ── Helper: render a dashboard section to PDF ──
-    async function addSectionToPDF(renderFn, title, stepPct, stepLabel) {
-      setProgress(stepPct, stepLabel);
+    // ── Capture a live page section to PDF ──
+    async function capturePage(pageId, renderFn, title, pct, label) {
+      setProgress(pct, label);
 
-      // Prepare a temp container
-      const container = document.createElement('div');
-      container.style.cssText = `
-        position:fixed; left:-9999px; top:0; z-index:-1;
-        width:1400px; background:#f4f7fd; font-family:'Barlow',sans-serif;
-        padding:20px;
-      `;
-      document.body.appendChild(container);
+      // Show the page
+      document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+      const pg = document.getElementById(pageId);
+      if(pg) pg.classList.add('active');
 
-      // Inject CSS vars
-      container.innerHTML = `<style>
-        :root{--blue:#1a3a6b;--gold:#f0a500;--bg:#f4f7fd;--bg2:#fff;--bg3:#e8eef8;
-              --border:#cdd5e8;--text:#1a2340;--text2:#6b7a99;--text3:#9aa3bb;
-              --teciap:#1a3a6b;--ultra:#0e6674;--centro:#5b2d8e;
-              --accent2:#1a6b35;--danger:#b91c1c;}
-        *{box-sizing:border-box;margin:0;padding:0;}
-        body{font-family:'Barlow',sans-serif;font-size:13px;}
-      </style>`;
+      // Run the render function
+      if(renderFn) await renderFn();
+      await new Promise(r=>setTimeout(r,600)); // wait for charts to render
 
-      // Call the render function to populate container
-      await renderFn(container, mesLabel, lastUpLabel);
-
-      await new Promise(r=>setTimeout(r,300)); // wait for render
-
-      const canvas = await html2canvas(container, {
-        scale: 1.8,
+      // Capture the page element
+      const el = pg || document.body;
+      
+      // Temporarily expand for full capture
+      const origOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'visible';
+      pg.style.display = 'block';
+      
+      const canvas = await html2canvas(el, {
+        scale: 1.5,
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#f4f7fd',
         logging: false,
+        windowWidth: 1440,
+        width: el.scrollWidth,
+        height: el.scrollHeight,
       });
-      document.body.removeChild(container);
+      
+      document.body.style.overflow = origOverflow;
 
-      // Add to PDF
+      // Add page to PDF
       if(!isFirstPage) pdf.addPage();
       isFirstPage = false;
 
-      // Header band
-      pdf.setFillColor(26, 58, 107);
+      // Header
+      pdf.setFillColor(26,58,107);
       pdf.rect(0, 0, pageW, 12, 'F');
       pdf.setTextColor(255,255,255);
-      pdf.setFontSize(9);
+      pdf.setFontSize(8.5);
       pdf.setFont('helvetica','bold');
-      pdf.text('OPERAÇÕES LOGÍSTICA — INPASA', margin, 8);
+      pdf.text('INPASA — OPERAÇÕES LOGÍSTICA', 10, 8);
       pdf.setFont('helvetica','normal');
       pdf.text(title, pageW/2, 8, {align:'center'});
-      pdf.text(`${mesLabel}  |  Atualização: ${lastUpLabel}`, pageW-margin, 8, {align:'right'});
+      pdf.text(`${mesLabel}  |  ${lastUpLabel}`, pageW-10, 8, {align:'right'});
+      // Gold line
+      pdf.setFillColor(240,165,0);
+      pdf.rect(0, 12, pageW, 1.2, 'F');
 
-      // Gold accent line
-      pdf.setFillColor(240, 165, 0);
-      pdf.rect(0, 12, pageW, 1.5, 'F');
+      // Content: fit the captured canvas to the page
+      const contentY = 14.5;
+      const contentH = pageH - contentY - 5;
+      const ratio = canvas.width / canvas.height;
+      let imgW = pageW;
+      let imgH = imgW / ratio;
+      if(imgH > contentH) { imgH = contentH; imgW = imgH * ratio; }
+      const imgX = (pageW - imgW) / 2;
 
-      // Content
-      const contentY = 15;
-      const contentH = pageH - contentY - 6;
-      const imgW = pageW - 0;
-      const imgH = (canvas.height / canvas.width) * imgW;
-      const finalH = Math.min(imgH, contentH);
-      const finalW = (finalH / imgH) * imgW;
-
-      pdf.addImage(canvas.toDataURL('image/jpeg', 0.88), 'JPEG',
-        (pageW - finalW)/2, contentY, finalW, finalH);
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.85), 'JPEG', imgX, contentY, imgW, imgH);
 
       // Footer
-      pdf.setFillColor(240, 165, 0);
-      pdf.rect(0, pageH-6, pageW, 6, 'F');
+      pdf.setFillColor(240,165,0);
+      pdf.rect(0, pageH-5, pageW, 5, 'F');
       pdf.setTextColor(26,58,107);
       pdf.setFontSize(7);
-      pdf.setFont('helvetica','normal');
-      pdf.text('Confidencial — Uso Interno INPASA', pageW/2, pageH-2, {align:'center'});
+      pdf.text('Confidencial — Uso Interno INPASA Agroindustrial', pageW/2, pageH-1.5, {align:'center'});
     }
 
-    // ── Render each terminal section ──
-    const termConfigs = [
-      {key:'teciap', name:'TECIAP'},
-      {key:'ultra',  name:'ULTRACARGO RO'},
-      {key:'centro', name:'CENTROESTE'},
-    ];
-
-    let step = 10;
-    for(const tc of termConfigs) {
-      if(!sections[tc.key]) continue;
-      await addSectionToPDF(
-        (container) => renderTerminalHTML(container, tc.key),
-        `TERMINAL ${tc.name} — ${mesLabel}`,
-        step, `Renderizando ${tc.name}...`
-      );
-      step += 15;
+    // ── Terminal pages ──
+    if(sections.teciap) {
+      await capturePage('page-terminals', ()=>{ currentTerminal='teciap'; window.renderTerminalForPDF && window.renderTerminalForPDF('teciap'); }, 'TERMINAL TECIAP', 10, 'Capturando Teciap...');
+    }
+    if(sections.ultra) {
+      await capturePage('page-terminals', ()=>{ currentTerminal='ultra'; window.renderTerminalForPDF && window.renderTerminalForPDF('ultra'); }, 'TERMINAL ULTRACARGO RO', 28, 'Capturando Ultracargo...');
+    }
+    if(sections.centro) {
+      await capturePage('page-terminals', ()=>{ currentTerminal='centro'; window.renderTerminalForPDF && window.renderTerminalForPDF('centro'); }, 'TERMINAL CENTROESTE', 46, 'Capturando Centroeste...');
     }
 
     // ── Ferrovia ──
     if(sections.ferro) {
-      await addSectionToPDF(
-        (container) => renderFerroviaHTML(container),
-        `MONITORAMENTO FERROVIA — ${mesLabel}`,
-        step, 'Renderizando Ferrovia...'
-      );
-      step += 15;
+      await capturePage('page-ferrovia', ()=>renderFerrovia(), 'MONITORAMENTO FERROVIA', 64, 'Capturando Ferrovia...');
     }
 
     // ── Take or Pay ──
     if(sections.top) {
-      await addSectionToPDF(
-        (container) => renderTopHTML(container),
-        `TAKE OR PAY FERROVIA — ${cy}`,
-        step, 'Renderizando Take or Pay...'
-      );
-      step += 10;
+      await capturePage('page-takeorpay', ()=>renderTakeOrPay(), 'TAKE OR PAY FERROVIA — '+cy, 82, 'Capturando Take or Pay...');
     }
 
-    setProgress(95, 'Finalizando PDF...');
-    await new Promise(r=>setTimeout(r,200));
+    // Restore original page
+    showPage(document.querySelector('.nav-item.active')?.dataset?.page || 'terminals');
 
-    const fileName = `Dashboard_Logistica_${curMonthStr}_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.pdf`;
+    setProgress(95, 'Finalizando PDF...');
+    await new Promise(r=>setTimeout(r,300));
+
+    const fileName = `Dashboard_Logistica_${curMonthStr}_${new Date().toLocaleDateString('pt-BR').replace(/\/g,'-')}.pdf`;
     pdf.save(fileName);
     setProgress(100, '✅ PDF gerado com sucesso!');
-    setTimeout(()=>{ closePdfModal(); progDiv.style.display='none'; }, 2000);
+    setTimeout(()=>{ progDiv.style.display='none'; }, 3000);
 
   } catch(err) {
     console.error('PDF error:', err);
+    setProgress(0,'');
+    document.getElementById('pdfOverlay').classList.add('open');
+    progDiv.style.display='block';
     progText.textContent = '❌ Erro: ' + err.message;
   }
 }
+
 
 function loadScriptIfNeeded(src) {
   return new Promise((res, rej) => {
@@ -2781,7 +2774,8 @@ async function renderFerroviaHTML(container) {
 
 async function renderTopHTML(container) {
   const curY = parseInt(getCurMonth().split('-')[0]);
-  const notas=db.notas.filter(r=>r.modal==='Ferroviário');
+  // Take or Pay Ferrovia: apenas Teciap e Ultracargo (não Centroeste)
+  const notas=db.notas.filter(r=>r.modal==='Ferroviário'&&(r.terminal==='teciap'||r.terminal==='ultra'));
   const monthlyVol=m=>{
     const pad=String(m+1).padStart(2,'0');
     return notas.filter(r=>r.data&&r.data.startsWith(`${curY}-${pad}`)).reduce((s,r)=>s+r.qtde,0)/1000;
