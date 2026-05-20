@@ -1084,7 +1084,14 @@ function processNotas(rows) {
     if(produto && nf) db.produtoMap[fNumNota+'_'+nf] = produto;
     // nfClienteMap: chave terminal_nf -> nomeCliente (para tabela de destinos)
     if(nomeClienteRaw && nf) db.nfClienteMap[terminal+'_'+nf] = nomeClienteRaw;
-    db.notas.push({nf,terminal,filial,modal,rotina,qtde,data,dep:depKey,nomeCliente:nomeClienteRaw,produto});
+    // clienteCod: pegar Cód. Cliente (col 16) para Carregamento Usina
+    const clienteCodNF = (() => {
+      const v = r[16]; // Cód. Cliente col 16
+      return typeof v==='number' ? v : parseFloat(String(v||'0'));
+    })();
+    const TERM_CODS = {teciap:3490, ultra:83868, centro:23184};
+    const clienteCodTerminal = TERM_CODS[terminal] || 0;
+    db.notas.push({nf,terminal,filial,modal,rotina,qtde,data,dep:depKey,nomeCliente:nomeClienteRaw,produto,clienteCod:clienteCodTerminal});
     added++;
   }
   return {added,skipped};
@@ -1439,19 +1446,19 @@ function renderTransitoTables(t, today) {
   const todayD = new Date(today + 'T12:00:00');
   const clienteCod = TERMINAL_MAP[t].cod[0];
 
-  // ── CARREGAMENTO USINA: vem das DESCARGAS por Data Chegada (D, D-1, D-2, D-3) ──
-  // Agrupa descargas do terminal por data de chegada e filial
+  // ── CARREGAMENTO USINA: vem das NOTAS FISCAIS por Cód. Cliente e Data Emissão ──
+  // Usa db.notas filtrado pelo código do terminal (Cód. Cliente)
+  // Qtde em litros / 1000 = m³, agrupado por data emissão e filial
   const descByDate = {};
-  // Filtro estrito: apenas registros destinados a ESTE terminal (pelo código de cliente)
-  // Exclui registros Rumo e de outros terminais
-  db.descargas.filter(r => {
+  db.notas.filter(r => {
     if(!r.data) return false;
-    // Comparação numérica robusta: clienteCod é number, r.cliente pode ser number ou string
-    const cli = typeof r.cliente === 'number' ? r.cliente : parseFloat(r.cliente);
+    const cli = typeof r.clienteCod === 'number' ? r.clienteCod
+              : typeof r.cliente === 'number' ? r.cliente
+              : parseFloat(r.clienteCod || r.cliente || 0);
     return cli === clienteCod;
   }).forEach(r => {
     if(!descByDate[r.data]) descByDate[r.data] = { Sinop:0, 'Nova Mutum':0 };
-    descByDate[r.data][r.filial] = (descByDate[r.data][r.filial]||0) + r.pesoDst/1000;
+    descByDate[r.data][r.filial] = (descByDate[r.data][r.filial]||0) + r.qtde/1000;
   });
 
   // ── DATA PREVISTA / ATRASADO: vem do TRÂNSITO ──
