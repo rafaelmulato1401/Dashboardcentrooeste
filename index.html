@@ -2476,20 +2476,15 @@ async function gerarPDF() {
 
     // ── KPI card ──
     function drawKpi(x,y,w,h,accent,label,value,sub) {
-      // Card bg
       pdf.setFillColor(255,255,255); pdf.setDrawColor(205,213,232);
-      pdf.roundedRect(x,y,w,h,2,2,'FD');
-      // Accent top bar
-      setFill(accent); pdf.rect(x,y,w,1.5,'F');
-      // Label
-      setTxt('#6b7a99'); pdf.setFont('helvetica','normal'); pdf.setFontSize(6.5);
-      pdf.text(label.toUpperCase(), x+3, y+6);
-      // Value
-      setTxt('#1a2340'); pdf.setFont('helvetica','bold'); pdf.setFontSize(13);
-      pdf.text(String(value), x+3, y+14);
-      // Sub
-      setTxt('#9aa3bb'); pdf.setFont('helvetica','normal'); pdf.setFontSize(6);
-      pdf.text(String(sub||''), x+3, y+19);
+      pdf.roundedRect(x,y,w,h,1.5,1.5,'FD');
+      setFill(accent); pdf.rect(x,y,w,1.2,'F');
+      setTxt('#6b7a99'); pdf.setFont('helvetica','normal'); pdf.setFontSize(5.5);
+      pdf.text(label.toUpperCase(), x+2, y+4.5);
+      setTxt('#1a2340'); pdf.setFont('helvetica','bold'); pdf.setFontSize(10);
+      pdf.text(String(value), x+2, y+10);
+      setTxt('#9aa3bb'); pdf.setFont('helvetica','normal'); pdf.setFontSize(5);
+      pdf.text(String(sub||''), x+2, y+13.5);
     }
 
     // ── Table helpers ──
@@ -2656,7 +2651,7 @@ async function gerarPDF() {
         [backlog>=0?'#1a6b35':'#b91c1c','Backlog Recebimento',fmt(Math.abs(backlog)),backlog>=0?'Acima do previsto':'Pendência'],
         ['#1a3a6b','Vol. Projetado',fmt(volProjetado),'m³ estimado mês'],
       ];
-      const kpiW=(W-2*M)/kpis1.length, kpiH=22, kpiY=15.5;
+      const kpiW=(W-2*M)/kpis1.length, kpiH=15, kpiY=15;
       kpis1.forEach(([ac,lb,vl,sb],i)=>drawKpi(M+i*kpiW, kpiY, kpiW-1, kpiH, ac, lb, vl, sb));
 
       // ── KPI Row 2 ──
@@ -2696,22 +2691,20 @@ async function gerarPDF() {
         return r?(r.saldoAtual||0)/1000:null;
       });
 
-      // ── PÁGINA 2 DO TERMINAL: gráficos + tabelas ──
-      pdf.addPage();
-      drawChrome('TERMINAL '+tc.label+' — GRÁFICOS & TABELAS — '+mesLbl);
-      const CW=W-2*M;  // chart full width
-      const CH=42;     // chart height each
-      const CT=15;     // start below header
+      // ── GRÁFICOS + TABELAS na mesma página ──
+      const CW=W-2*M;
+      const CH=33;
+      const CT=k2Y+kpiH+3;
 
       // ── GRÁFICO 1: Descarga Rodoviária ──
-      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5);
+      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(6.5);
       pdf.text('DESCARGA RODOVIÁRIA', M, CT-1);
       drawBarChart(M, CT, CW, CH, lbl30,
         [{label:'Sinop',data:sinopD,borderColor:'#1a3a6b'},{label:'Nova Mutum',data:nmD,borderColor:'#f0a500'}], 'm³');
 
       // ── GRÁFICO 2: Carregamentos ──
-      const CT2=CT+CH+7;
-      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5);
+      const CT2=CT+CH+4;
+      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(6.5);
       pdf.text('CARREGAMENTOS — FERRO / RODO / TRANSF', M, CT2-1);
       const carrDS=[
         {label:'Ferrovia',data:carrFerroD,borderColor:'#1a3a6b'},
@@ -2730,16 +2723,17 @@ async function gerarPDF() {
       ].filter(ds=>ds.data.some(v=>v));
       drawBarChart(M, CT3, CW, CH, lbl30, estDS.length?estDS:[{label:'Sem dados',data:lbl30.map(()=>null),borderColor:'#9aa3bb'}], 'm³');
 
-      // ── TABELAS abaixo dos gráficos ──
-      const tblY=CT3+CH+6;
+      // ── TABELAS: 4 tabelas 2x2 ──
+      const tblY=CT3+CH3+3;
       const tblHalf=(W-2*M)/2-3;
-
-      // LEFT: Carregamento Usina
-      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5);
-      pdf.text('CARREGAMENTO USINA', M, tblY+3);
-      const usCols=[['',7],['Data',28],['Sinop',26,'right'],['N.Mutum',26,'right'],['Total',24,'right']];
-      drawTableHeader(M, tblY+4, tblHalf, usCols, color);
+      const tblCols=[['',6],['Data',26],['Sinop',24,'right'],['N.Mutum',24,'right'],['Total',22,'right']];
       const todayD2=new Date(today2+'T12:00:00');
+      const qX=M+tblHalf+6;
+
+      // ── TOP-LEFT: Carregamento Usina ──
+      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(6.5);
+      pdf.text('CARREGAMENTO USINA', M, tblY+3);
+      drawTableHeader(M,tblY+4,tblHalf,tblCols,color);
       let usTotal=[0,0];
       ['D','D-1','D-2','D-3'].forEach((lbl,i)=>{
         const dd=new Date(todayD2); dd.setDate(dd.getDate()-i);
@@ -2748,38 +2742,86 @@ async function gerarPDF() {
         const s2=rows2.filter(r=>r.filial==='Sinop').reduce((a,r)=>a+r.qtde,0)/1000;
         const n2=rows2.filter(r=>r.filial==='Nova Mutum').reduce((a,r)=>a+r.qtde,0)/1000;
         usTotal[0]+=s2; usTotal[1]+=n2;
-        drawTableRow(M, tblY+10+i*5.5, tblHalf, usCols,
+        drawTableRow(M,tblY+9+i*4.8,tblHalf,tblCols,
           [lbl,fmtDate(ds),s2?fmt(s2):'-',n2?fmt(n2):'-',(s2+n2)?fmt(s2+n2):'-'],
           i%2?'#f7f9fd':null,'#1a2340');
       });
-      drawTableRow(M, tblY+32, tblHalf, usCols,
+      drawTableRow(M,tblY+28.2,tblHalf,tblCols,
         ['Total','',fmt(usTotal[0]),fmt(usTotal[1]),fmt(usTotal[0]+usTotal[1])],
         '#e8eef8','#1a3a6b');
 
-      // RIGHT: Quebra Mensal
-      const qX=M+tblHalf+6;
-      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5);
+      // ── TOP-RIGHT: Quebra Mensal ──
+      const qCols=[['Filial',40],['Entrada m³',33,'right'],['Quebra m³',30,'right'],['Índice',22,'right']];
+      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(6.5);
       pdf.text('QUEBRA MENSAL', qX, tblY+3);
-      const qCols=[['Filial',42],['Entrada m³',36,'right'],['Quebra m³',33,'right'],['Índice',24,'right']];
-      drawTableHeader(qX, tblY+4, tblHalf, qCols, color);
+      drawTableHeader(qX,tblY+4,tblHalf,qCols,color);
       let totE=0,totQ=0;
       ['Sinop','Nova Mutum'].forEach((f,i)=>{
         const sub=descMes.filter(r=>r.filial===f);
         const ent=sub.reduce((s,r)=>s+r.pesoDst,0)/1000;
         const qbr=sub.reduce((s,r)=>s+(r.quebra||0),0)/1000;
         totE+=ent; totQ+=qbr;
-        drawTableRow(qX,tblY+10+i*5.5,tblHalf,qCols,
+        drawTableRow(qX,tblY+9+i*4.8,tblHalf,qCols,
           [f,fmt(ent),fmt(qbr),ent?(qbr/ent*100).toFixed(2)+'%':'-'],
           i%2?'#f7f9fd':null);
       });
-      drawTableRow(qX,tblY+21,tblHalf,qCols,
+      drawTableRow(qX,tblY+18.6,tblHalf,qCols,
         ['Total',fmt(totE),fmt(totQ),totE?(totQ/totE*100).toFixed(2)+'%':'-'],
         '#e8eef8','#1a3a6b');
-    }
 
-    // ═══════════════════════════════════════════
-    // FERROVIA PAGE
-    // ═══════════════════════════════════════════
+      // ── BOTTOM-LEFT: Data Prevista ──
+      const tblY2=tblY+36;
+      const transit=db.transito.filter(r=>r.terminal===t);
+      const transitByDate2={};
+      transit.forEach(r=>{
+        if(!r.prevChegada) return;
+        if(!transitByDate2[r.prevChegada]) transitByDate2[r.prevChegada]={Sinop:0,'Nova Mutum':0};
+        transitByDate2[r.prevChegada][r.filial]=(transitByDate2[r.prevChegada][r.filial]||0)+r.pesoLiq/1000;
+      });
+      setTxt('#1a6b35'); pdf.setFont('helvetica','bold'); pdf.setFontSize(6.5);
+      pdf.text('DATA PREVISTA', M, tblY2+3);
+      drawTableHeader(M,tblY2+4,tblHalf,tblCols,'#1a6b35');
+      const futDates2=[0,1,2].map(o=>{const d=new Date(todayD2);d.setDate(d.getDate()+o);return localDateStr(d);});
+      let futTotal=[0,0];
+      ['D','D+1','D+2'].forEach((lbl,i)=>{
+        const ds=futDates2[i];
+        const s2=transitByDate2[ds]?.Sinop||0;
+        const n2=transitByDate2[ds]?.['Nova Mutum']||0;
+        futTotal[0]+=s2; futTotal[1]+=n2;
+        drawTableRow(M,tblY2+9+i*4.8,tblHalf,tblCols,
+          [lbl,fmtDate(ds),s2?fmt(s2):'-',n2?fmt(n2):'-',(s2+n2)?fmt(s2+n2):'-'],
+          i%2?'#f7f9fd':null,'#1a2340');
+      });
+      drawTableRow(M,tblY2+23.4,tblHalf,tblCols,
+        ['Total','',fmt(futTotal[0]),fmt(futTotal[1]),fmt(futTotal[0]+futTotal[1])],
+        '#e8eef8','#1a6b35');
+
+      // ── BOTTOM-RIGHT: Atrasado ──
+      setTxt('#b91c1c'); pdf.setFont('helvetica','bold'); pdf.setFontSize(6.5);
+      pdf.text('ATRASADO', qX, tblY2+3);
+      drawTableHeader(qX,tblY2+4,tblHalf,tblCols,'#b91c1c');
+      const atrasados2={};
+      transit.forEach(r=>{
+        if(!r.prevChegada||r.prevChegada>=today2) return;
+        const diff=Math.floor((todayD2-new Date(r.prevChegada+'T12:00:00'))/86400000);
+        const lbl2=diff===1?'D-1':diff===2?'D-2':diff===3?'D-3':'>D-3';
+        if(!atrasados2[lbl2]) atrasados2[lbl2]={Sinop:0,'Nova Mutum':0,date:r.prevChegada};
+        atrasados2[lbl2][r.filial]=(atrasados2[lbl2][r.filial]||0)+r.pesoLiq/1000;
+      });
+      let atTotal=[0,0];
+      ['D-1','D-2','D-3','>D-3'].forEach((lbl,i)=>{
+        const a=atrasados2[lbl]||{Sinop:0,'Nova Mutum':0,date:''};
+        const s2=a.Sinop,n2=a['Nova Mutum'];
+        atTotal[0]+=s2; atTotal[1]+=n2;
+        drawTableRow(qX,tblY2+9+i*4.8,tblHalf,tblCols,
+          [lbl,fmtDate(a.date||''),s2?fmt(s2):'-',n2?fmt(n2):'-',(s2+n2)?fmt(s2+n2):'-'],
+          i%2?'#f7f9fd':null,s2+n2>0?'#b91c1c':'#1a2340');
+      });
+      drawTableRow(qX,tblY2+28.2,tblHalf,tblCols,
+        ['Total','',fmt(atTotal[0]),fmt(atTotal[1]),fmt(atTotal[0]+atTotal[1])],
+        '#e8eef8','#b91c1c');
+    } // end for termConfig
+
     if(sections.ferro) {
       prog(60, 'Gerando Ferrovia...');
       if(!firstPage) pdf.addPage(); firstPage=false;
@@ -2854,7 +2896,12 @@ async function gerarPDF() {
       const cliList=Array.from(clienteSet2).sort();
       setTxt('#1a3a6b'); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5);
       pdf.text('CARREGAMENTO POR DESTINO', tX, tY+3);
-      const dCols=[['Data',14],...cliList.map(c=>[c.length>10?c.substring(0,10)+'.':(c),(tW-14)/cliList.length,'right']),['Total',14,'right']];
+      const dColsFixed=14, dTotalFixed=14;
+      const dCliW = cliList.length>0 ? (tW-dColsFixed-dTotalFixed)/cliList.length : tW-28;
+      const dCols=[['Data',dColsFixed],...cliList.map(c=>{
+        const lbl=c.length>12?c.substring(0,11)+'.':(c);
+        return [lbl, Math.max(dCliW,18), 'right'];
+      }),['Total',dTotalFixed,'right']];
       drawTableHeader(tX, tY+4, tW, dCols, '#1a3a6b');
       let rowIdx=0, grandT=0;
       days.forEach(d=>{
@@ -2913,7 +2960,8 @@ async function gerarPDF() {
       // Quarterly tables (right) - 2x2 grid
       const qX=M+TOP_W+6, qW=W-M-qX;
       const TRIM=[['1º TRIMESTRE',[0,1,2]],['2º TRIMESTRE',[3,4,5]],['3º TRIMESTRE',[6,7,8]],['4º TRIMESTRE',[9,10,11]]];
-      const TRIM_COLS=[['Mês',18],['Faturado',22,'right'],['Mín.',22,'right'],['Índice',14,'right'],['Contrato',22,'right'],['Índice',14,'right']];
+      // Trimestral: sem coluna Contrato (já mostrado no anual) para caber na largura
+      const TRIM_COLS=[['Mês',20],['Faturado',24,'right'],['Mín.Cont.',26,'right'],['Índice',14,'right']];
       TRIM.forEach(([lbl,months],qi)=>{
         const col=qi%2, row=Math.floor(qi/2);
         const qx2=qX+col*(qW/2+2), qy2=tY2+row*55;
@@ -2933,7 +2981,7 @@ async function gerarPDF() {
         });
         const tIm=tM?Math.round(tF/tM*100):0;
         drawTableRow(qx2,qy2+10+3*5.5,qw2,TRIM_COLS,
-          ['Total',tF?fmt(tF):'-',fmt(tM),tF?tIm+'%':'-',fmt(tC),tF?Math.round(tF/tC*100)+'%':'-'],
+          ['Total',tF?fmt(tF):'-',fmt(tM),tF?tIm+'%':'-'],
           '#e8eef8','#1a3a6b');
       });
     }
@@ -3224,7 +3272,7 @@ async function renderTopHTML(container) {
         ${[['1º Trimestre',[0,1,2]],['2º Trimestre',[3,4,5]],['3º Trimestre',[6,7,8]],['4º Trimestre',[9,10,11]]].map(([label,months])=>`
           <div>
             <div style="font-size:12px;font-weight:700;color:#1a3a6b;margin-bottom:6px;border-bottom:2px solid #1a3a6b;padding-bottom:4px">${label}</div>
-            <table style="width:100%;border-collapse:collapse;font-size:10px">${tHead}<tbody>${buildTableHTML(months)}</tbody></table>
+            <table style="width:100%;border-collapse:collapse;font-size:10px">${tHeadTrim}<tbody>${buildTableHTML(months)}</tbody></table>
           </div>`).join('')}
       </div>
     </div>`;
