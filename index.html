@@ -2419,584 +2419,505 @@ async function gerarPDF() {
   };
   if(!Object.values(sections).some(Boolean)) { alert('Selecione ao menos uma seção.'); return; }
 
-  const progDiv  = document.getElementById('pdfProgress');
-  const progText = document.getElementById('pdfProgressText');
-  const progBar  = document.getElementById('pdfProgressBar');
-  progDiv.style.display = 'block';
-  function prog(pct, txt) { progBar.style.width=pct+'%'; progText.textContent=txt; }
-
+  const prog = (pct,txt) => { document.getElementById('pdfProgressBar').style.width=pct+'%'; document.getElementById('pdfProgressText').textContent=txt; };
+  document.getElementById('pdfProgress').style.display='block';
   document.getElementById('pdfOverlay').classList.remove('open');
 
   try {
-    prog(5, 'Carregando bibliotecas...');
+    prog(3,'Carregando jsPDF...');
     await loadScriptIfNeeded('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
     const { jsPDF } = window.jspdf;
 
-    const pdf = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4' });
-    const W = pdf.internal.pageSize.getWidth();   // 297mm
-    const H = pdf.internal.pageSize.getHeight();  // 210mm
-    const M = 10; // margin
-    let firstPage = true;
+    // ── CORES ──
+    const C = {
+      blue:'#1a3a6b', gold:'#c8922a', white:'#ffffff',
+      bg:'#f0f4fa', bg2:'#e4eaf5', border:'#c8d3e8',
+      text:'#1a2340', text2:'#4a5568', text3:'#8899bb',
+      green:'#166534', red:'#991b1b', greenBg:'#dcfce7', redBg:'#fee2e2',
+    };
+    function rgb(hex){const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return[r,g,b];}
+    function fill(h){const[r,g,b]=rgb(h);pdf.setFillColor(r,g,b);}
+    function draw(h){const[r,g,b]=rgb(h);pdf.setDrawColor(r,g,b);}
+    function txt(h) {const[r,g,b]=rgb(h);pdf.setTextColor(r,g,b);}
 
-    const curM = getCurMonth();
-    const [cy,cm] = curM.split('-');
-    const mesLbl = (MONTHS[parseInt(cm)-1]||cm)+' / '+cy;
-    const lastUp = document.getElementById('lastUpdate').textContent;
+    const pdf = new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+    const W=297, H=210, M=8;
+    let first=true;
 
-    // ── Draw page header + footer ──
-    function drawChrome(title) {
-      // Header bar
-      pdf.setFillColor(26,58,107);
-      pdf.rect(0,0,W,13,'F');
-      pdf.setFillColor(240,165,0);
-      pdf.rect(0,13,W,1.5,'F');
-      // Header text
-      pdf.setTextColor(255,255,255);
-      pdf.setFont('helvetica','bold'); pdf.setFontSize(9);
-      pdf.text('INPASA — OPERAÇÕES LOGÍSTICA', M, 9);
-      pdf.setFont('helvetica','normal'); pdf.setFontSize(9);
-      pdf.text(title, W/2, 9, {align:'center'});
-      pdf.text(mesLbl+'  |  '+lastUp, W-M, 9, {align:'right'});
+    const curM=getCurMonth(), [cY,cMo]=curM.split('-');
+    const mesLbl=(MONTHS[parseInt(cMo)-1]||cMo)+'/'+cY;
+    const upd=document.getElementById('lastUpdate').textContent;
+
+    // ═══════════════════════════════════════════
+    // PAGE CHROME
+    // ═══════════════════════════════════════════
+    function chrome(title, accentColor) {
+      accentColor = accentColor||C.blue;
+      // Header gradient bar
+      fill(C.blue); pdf.rect(0,0,W,14,'F');
+      // Accent stripe
+      fill(accentColor==='#c8922a'?C.gold:accentColor); pdf.rect(0,14,W,2,'F');
+      // Logo / brand
+      txt(C.white); pdf.setFont('helvetica','bold'); pdf.setFontSize(10);
+      pdf.text('INPASA', M,10);
+      pdf.setFont('helvetica','normal'); pdf.setFontSize(8);
+      pdf.text('OPERAÇÕES LOGÍSTICA', M+18,10);
+      // Title center
+      pdf.setFont('helvetica','bold'); pdf.setFontSize(11);
+      pdf.text(title, W/2, 9.5, {align:'center'});
+      // Right info
+      pdf.setFont('helvetica','normal'); pdf.setFontSize(7.5);
+      pdf.text(mesLbl+'  ·  '+upd, W-M, 9.5, {align:'right'});
       // Footer
-      pdf.setFillColor(26,58,107);
-      pdf.rect(0,H-6,W,6,'F');
-      pdf.setTextColor(240,165,0);
-      pdf.setFontSize(7); pdf.setFont('helvetica','italic');
-      pdf.text('Confidencial — Uso Interno INPASA Agroindustrial S/A', W/2, H-2, {align:'center'});
+      fill(C.blue); pdf.rect(0,H-7,W,7,'F');
+      fill(C.gold); pdf.rect(0,H-7,W,1,'F');
+      txt('#aabbdd'); pdf.setFont('helvetica','italic'); pdf.setFontSize(6.5);
+      pdf.text('Confidencial — Uso Interno INPASA Agroindustrial S/A', W/2, H-2.5, {align:'center'});
     }
 
-    // ── Color helpers ──
-    function hexToRgb(hex) {
-      const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
-      return [r,g,b];
-    }
-    function setFill(hex) { const [r,g,b]=hexToRgb(hex); pdf.setFillColor(r,g,b); }
-    function setDraw(hex) { const [r,g,b]=hexToRgb(hex); pdf.setDrawColor(r,g,b); }
-    function setTxt(hex)  { const [r,g,b]=hexToRgb(hex); pdf.setTextColor(r,g,b); }
-
-    // ── KPI card ──
-    function drawKpi(x,y,w,h,accent,label,value,sub) {
-      pdf.setFillColor(255,255,255); pdf.setDrawColor(205,213,232);
-      pdf.roundedRect(x,y,w,h,1.5,1.5,'FD');
-      setFill(accent); pdf.rect(x,y,w,1.2,'F');
-      setTxt('#6b7a99'); pdf.setFont('helvetica','normal'); pdf.setFontSize(5.5);
-      pdf.text(label.toUpperCase(), x+2, y+4.5);
-      setTxt('#1a2340'); pdf.setFont('helvetica','bold'); pdf.setFontSize(10);
-      pdf.text(String(value), x+2, y+10);
-      setTxt('#9aa3bb'); pdf.setFont('helvetica','normal'); pdf.setFontSize(5);
-      pdf.text(String(sub||''), x+2, y+13.5);
-    }
-
-    // ── Table helpers ──
-    function drawTableHeader(x,y,w,cols,color) {
-      setFill(color); pdf.rect(x,y,w,6,'F');
-      setTxt('#ffffff'); pdf.setFont('helvetica','bold'); pdf.setFontSize(7);
-      let cx=x;
-      cols.forEach(([lbl,cw,align])=>{
-        const tx = align==='right' ? cx+cw-1 : cx+2;
-        pdf.text(lbl, tx, y+4.3, {align: align==='right'?'right':'left'});
-        cx+=cw;
-      });
-    }
-    function drawTableRow(x,y,w,cols,vals,bgColor,textColor) {
-      if(bgColor){setFill(bgColor);pdf.rect(x,y,w,5.5,'F');}
-      setDraw('#cdd5e8'); pdf.setLineWidth(0.2);
-      pdf.line(x,y+5.5,x+w,y+5.5);
-      setTxt(textColor||'#1a2340'); pdf.setFont('helvetica','normal'); pdf.setFontSize(6.8);
-      let cx=x;
-      cols.forEach(([lbl,cw,align],i)=>{
-        const v = String(vals[i]||'-');
-        const tx = align==='right' ? cx+cw-1 : cx+2;
-        pdf.text(v, tx, y+3.8, {align: align==='right'?'right':'left'});
-        cx+=cw;
-      });
-    }
-
-    // ── BAR CHART renderer ──
-    function drawBarChart(x,y,w,h,labels,datasets,unit,showLabels) {
-      // Background
-      pdf.setFillColor(250,252,255); setDraw('#cdd5e8'); pdf.setLineWidth(0.3);
+    // ═══════════════════════════════════════════
+    // KPI CARD
+    // ═══════════════════════════════════════════
+    function kpi(x,y,w,h,label,value,sub,accentHex,valColor) {
+      // Shadow effect
+      fill('#d0d8ee'); pdf.rect(x+0.5,y+0.5,w,h,'F');
+      // Card
+      fill(C.white); draw(C.border); pdf.setLineWidth(0.2);
       pdf.rect(x,y,w,h,'FD');
-      if(!labels||!labels.length) return;
-      // Find max
-      let maxVal=0;
-      datasets.forEach(ds=>(ds.data||[]).forEach(v=>{if(v&&v>maxVal)maxVal=v;}));
-      if(!maxVal) return;
-      maxVal = Math.ceil(maxVal/1000)*1000;
+      // Accent left bar
+      fill(accentHex||C.blue); pdf.rect(x,y,1.5,h,'F');
+      // Label
+      txt(C.text3); pdf.setFont('helvetica','normal'); pdf.setFontSize(5.5);
+      pdf.text(label.toUpperCase(), x+4, y+5);
+      // Value
+      const vc=valColor||C.text;
+      txt(vc); pdf.setFont('helvetica','bold'); pdf.setFontSize(13);
+      pdf.text(String(value), x+4, y+12.5);
+      // Sub
+      txt(C.text2); pdf.setFont('helvetica','normal'); pdf.setFontSize(5);
+      pdf.text(String(sub||''), x+4, y+16);
+    }
 
-      const padL=18, padB=12, padT=8, padR=4; // padT=8 gives room for value labels above bars
-      const chartX=x+padL, chartY=y+padT, chartW=w-padL-padR, chartH=h-padT-padB;
-
-      // Y axis gridlines & labels
-      const ySteps=4;
-      setTxt('#9aa3bb'); pdf.setFontSize(5.5); pdf.setFont('helvetica','normal');
-      setDraw('#e0e6f0'); pdf.setLineWidth(0.2);
-      for(let i=0;i<=ySteps;i++){
-        const val=maxVal*i/ySteps;
-        const py=chartY+chartH-chartH*i/ySteps;
-        pdf.line(chartX,py,chartX+chartW,py);
-        const lbl=val>=1000?(val/1000).toFixed(1)+'k':val.toFixed(0);
-        pdf.text(lbl, chartX-1, py+1.5, {align:'right'});
+    // ═══════════════════════════════════════════
+    // BAR CHART
+    // ═══════════════════════════════════════════
+    function barChart(x,y,w,h,labels,datasets) {
+      const pL=16,pB=11,pT=7,pR=3;
+      const cX=x+pL, cY=y+pT, cW=w-pL-pR, cH=h-pT-pB;
+      // Background
+      fill('#f8faff'); draw(C.border); pdf.setLineWidth(0.15);
+      pdf.rect(x,y,w,h,'FD');
+      // Max value
+      let mx=0;
+      datasets.forEach(ds=>(ds.data||[]).forEach(v=>{if(v&&v>mx)mx=v;}));
+      if(!mx) return;
+      mx=Math.ceil(mx/500)*500;
+      const steps=4;
+      // Grid + Y labels
+      draw('#e4eaf5'); pdf.setLineWidth(0.15);
+      txt(C.text3); pdf.setFont('helvetica','normal'); pdf.setFontSize(5);
+      for(let i=0;i<=steps;i++){
+        const py=cY+cH-cH*i/steps;
+        pdf.line(cX,py,cX+cW,py);
+        const v=mx*i/steps;
+        const lbl=v>=1000?(v/1000).toFixed(v%1000?1:0)+'k':v.toFixed(0);
+        txt(C.text3); pdf.text(lbl,cX-1,py+1.5,{align:'right'});
       }
-
       // Bars
-      const barGroupW = chartW/labels.length;
-      const isStacked = datasets.length>1;
-      const barW = Math.min(barGroupW*0.6, 8);
-      const gapW = (barGroupW - barW) / 2;
-
+      const bGW=cW/labels.length;
+      const bW=Math.min(bGW*0.65,7);
+      const gap=(bGW-bW)/2;
       labels.forEach((lbl,i)=>{
-        const bx = chartX + i*barGroupW + gapW;
-        let stackY = chartY + chartH;
-
+        const bx=cX+i*bGW+gap;
+        let sy=cY+cH;
+        // Draw each dataset stacked
         datasets.forEach(ds=>{
-          const val = ds.data[i]||0;
-          if(!val) return;
-          const bh = (val/maxVal)*chartH;
-          const [r,g,b] = hexToRgb(ds.borderColor||'#1a3a6b');
-          pdf.setFillColor(r,g,b);
-          pdf.rect(bx, stackY-bh, barW, bh, 'F');
-          if(isStacked) stackY -= bh;
+          const v=ds.data[i]||0; if(!v) return;
+          const bh=(v/mx)*cH;
+          fill(ds.color||C.blue);
+          pdf.rect(bx,sy-bh,bW,bh,'F');
+          sy-=bh;
         });
-
+        // Total label on top
+        const total=datasets.reduce((s,ds)=>s+(ds.data[i]||0),0);
+        if(total>0){
+          const topY=cY+cH-(total/mx)*cH;
+          const fs=labels.length>25?4:4.5;
+          txt(C.text); pdf.setFont('helvetica','bold'); pdf.setFontSize(fs);
+          const lv=total>=1000?(total/1000).toFixed(1)+'k':total.toFixed(0);
+          pdf.text(lv,bx+bW/2,topY-0.8,{align:'center'});
+        }
         // X label
-        setTxt('#6b7a99'); pdf.setFontSize(5);
-        pdf.text(lbl, bx+barW/2, chartY+chartH+4, {align:'center'});
+        txt(C.text3); pdf.setFont('helvetica','normal'); pdf.setFontSize(labels.length>20?4:4.5);
+        pdf.text(String(lbl),bx+bW/2,cY+cH+4.5,{align:'center'});
       });
-
-      // Value labels on top of each full bar stack
-      // Compute total per bar (sum of all datasets)
-      const fontSize = labels.length > 25 ? 4 : labels.length > 18 ? 4.5 : 5;
-      labels.forEach((lbl,i)=>{
-        const total = datasets.reduce((s,ds)=>(s + (ds.data[i]||0)),0);
-        if(!total) return;
-        const bx = chartX + i*barGroupW + gapW;
-        const topY = chartY + chartH - (total/maxVal)*chartH;
-        // Value label above bar
-        const fmtV = total>=1000 ? (total/1000).toFixed(1)+'k' : total.toFixed(0);
-        setTxt('#1a2340'); pdf.setFont('helvetica','bold'); pdf.setFontSize(fontSize);
-        pdf.text(fmtV, bx+barW/2, topY-1, {align:'center'});
-      });
-
       // Legend
       if(datasets.length>1){
-        let lx = chartX;
+        let lx=cX;
         datasets.forEach(ds=>{
-          const [r,g,b]=hexToRgb(ds.borderColor||'#1a3a6b');
-          pdf.setFillColor(r,g,b); pdf.rect(lx,y+h-5,4,3,'F');
-          setTxt('#1a2340'); pdf.setFontSize(5.5);
-          pdf.text(ds.label||'', lx+5, y+h-3);
-          lx+=30;
+          fill(ds.color); pdf.rect(lx,y+h-4.5,3,2.5,'F');
+          txt(C.text2); pdf.setFont('helvetica','normal'); pdf.setFontSize(5);
+          pdf.text(ds.label||'',lx+4,y+h-3);
+          lx+=pdf.getStringUnitWidth(ds.label||'')*5/pdf.internal.scaleFactor+12;
         });
       }
+    }
+
+    // ═══════════════════════════════════════════
+    // TABLE
+    // ═══════════════════════════════════════════
+    function tableHeader(x,y,w,cols,color) {
+      fill(color||C.blue); pdf.rect(x,y,w,5.5,'F');
+      txt(C.white); pdf.setFont('helvetica','bold'); pdf.setFontSize(6.5);
+      let cx=x+1;
+      cols.forEach(([lbl,cw,al])=>{
+        const tx=al==='right'?cx+cw-1:cx+1;
+        pdf.text(lbl,tx,y+3.8,{align:al==='right'?'right':'left'});
+        cx+=cw;
+      });
+    }
+    function tableRow(x,y,w,cols,vals,bg,valColor,boldLast) {
+      if(bg){fill(bg);pdf.rect(x,y,w,5,'F');}
+      draw(C.border); pdf.setLineWidth(0.15);
+      pdf.line(x,y+5,x+w,y+5);
+      let cx=x+1;
+      cols.forEach(([lbl,cw,al],i)=>{
+        const v=String(vals[i]||'-');
+        const tx=al==='right'?cx+cw-1:cx+1;
+        const isBold=boldLast&&i===cols.length-1;
+        txt(valColor||(isBold?C.blue:C.text));
+        pdf.setFont('helvetica',isBold?'bold':'normal');
+        pdf.setFontSize(6.5);
+        pdf.text(v,tx,y+3.5,{align:al==='right'?'right':'left'});
+        cx+=cw;
+      });
+    }
+    function sectionTitle(x,y,title,color) {
+      txt(color||C.blue); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5);
+      pdf.text(title,x,y);
+      draw(color||C.blue); pdf.setLineWidth(0.4);
+      pdf.line(x,y+0.8,x+pdf.getStringUnitWidth(title)*7.5/pdf.internal.scaleFactor,y+0.8);
     }
 
     // ═══════════════════════════════════════════
     // TERMINAL PAGES
     // ═══════════════════════════════════════════
-    const termConfig = [
-      {key:'teciap', label:'TECIAP',        color:'#1a3a6b', chk:'pdfTeciap'},
-      {key:'ultra',  label:'ULTRACARGO RO', color:'#0e6674', chk:'pdfUltra'},
-      {key:'centro', label:'CENTROESTE',    color:'#5b2d8e', chk:'pdfCentro'},
+    const TERMS=[
+      {key:'teciap', label:'TECIAP',         color:'#1a3a6b', chk:'pdfTeciap'},
+      {key:'ultra',  label:'ULTRACARGO RO',  color:'#0e6674', chk:'pdfUltra'},
+      {key:'centro', label:'CENTROESTE',     color:'#4c1d95', chk:'pdfCentro'},
     ];
 
-    for(const tc of termConfig) {
+    let stepPct=10;
+    for(const tc of TERMS){
       if(!sections[tc.key]) continue;
-      prog(tc.key==='teciap'?15:tc.key==='ultra'?30:45, 'Gerando '+tc.label+'...');
+      prog(stepPct, 'Gerando '+tc.label+'...'); stepPct+=15;
+      if(!first) pdf.addPage(); first=false;
+      chrome('TERMINAL '+tc.label+' — '+mesLbl, tc.color);
 
-      if(!firstPage) pdf.addPage(); firstPage=false;
-      drawChrome('TERMINAL '+tc.label+' — '+mesLbl);
-
-      const t=tc.key, color=tc.color;
+      const t=tc.key, col=tc.color;
       const [cy2,cm2]=curM.split('-').map(Number);
       const diasMes=new Date(cy2,cm2,0).getDate();
-      const _dn=new Date();
-      const today2=_dn.getFullYear()+'-'+String(_dn.getMonth()+1).padStart(2,'0')+'-'+String(_dn.getDate()).padStart(2,'0');
-      const diaAtual=curM===today2.substring(0,7)?_dn.getDate():diasMes;
+      const _d=new Date(), today2=localDateStr(_d);
+      const diaAtual=curM===today2.substring(0,7)?_d.getDate():diasMes;
       const diaD1=diaAtual-1;
       const clienteCod=TERMINAL_MAP[t].cod[0];
       const descMes=db.descargas.filter(r=>(r.cliente===clienteCod||r.terminal===t)&&r.data&&r.data.startsWith(curM));
       const notasMes=db.notas.filter(r=>r.terminal===t&&r.data&&r.data.startsWith(curM));
       const cfgMes=(db.configHist[curM]||{})[t]||db.config[t]||{};
-      const top=cfgMes.top||0;
+      const top=cfgMes.top||0, estatHid=cfgMes.estat_hid||0, estatAni=cfgMes.estat_ani||0;
+      const tarifa=cfgMes.tarifa||0;
       const volRecebido=descMes.reduce((s,r)=>s+r.pesoDst,0)/1000;
       const expFerro=notasMes.filter(r=>r.modal==='Ferroviário').reduce((s,r)=>s+r.qtde,0)/1000;
       const expRodo=notasMes.filter(r=>r.modal!=='Ferroviário').reduce((s,r)=>s+r.qtde,0)/1000;
       const saldoTop=volRecebido-top;
       const metaDiaria=top>0?top/diasMes:0;
       let backlog=0;
-      const diaLoop=curM===today2.substring(0,7)?diaD1:diasMes;
-      for(let d=1;d<=diaLoop&&metaDiaria>0;d++){
+      for(let d=1;d<=diaD1&&metaDiaria>0;d++){
         const dd=descMes.filter(r=>new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.pesoDst,0)/1000;
         backlog=dd-metaDiaria+(d===1?0:backlog);
       }
-      const descFiltD1=descMes.filter(r=>new Date(r.data+'T12:00:00').getDate()<=diaD1);
-      const acumD1=descFiltD1.reduce((s,r)=>s+r.pesoDst,0)/1000;
-      const diasD1Set=new Set(descFiltD1.map(r=>new Date(r.data+'T12:00:00').getDate())).size;
-      const media2=diasD1Set>0?acumD1/diasD1Set:0;
-      const volProjetado=diaD1>=diasMes?volRecebido:(acumD1+media2*(diasMes-diaD1));
+      const descD1=descMes.filter(r=>new Date(r.data+'T12:00:00').getDate()<=diaD1);
+      const acumD1=descD1.reduce((s,r)=>s+r.pesoDst,0)/1000;
+      const diasD1=new Set(descD1.map(r=>new Date(r.data+'T12:00:00').getDate())).size;
+      const media=diasD1>0?acumD1/diasD1:0;
+      const projetado=diaD1>=diasMes?volRecebido:acumD1+media*(diasMes-diaD1);
       const transitoVol=db.transito.filter(r=>r.terminal===t).reduce((s,r)=>s+r.pesoLiq,0)/1000;
-      const estatHid=cfgMes.estat_hid||0, estatAni=cfgMes.estat_ani||0;
       const giro=(estatHid+estatAni)>0?volRecebido/(estatHid+estatAni):0;
-      const tarifa=cfgMes.tarifa||0;
       const custo=tarifa*volRecebido;
 
-      // ── KPI Row 1 ──
+      // ── KPI ROWS (compact, 2 rows) ──
+      const KY=17, KH=17, KW=(W-2*M)/7-0.8;
       const kpis1=[
-        [color,'Vol. Recebido Caminhões',fmt(volRecebido),'m³ no mês'],
-        [color,'Expedido Ferrovia',fmt(expFerro),'m³ no mês'],
-        [color,'Expedido Rodo/Transf.',fmt(expRodo),'m³ no mês'],
-        [color,'Take or Pay / Mês',fmt(top),'m³ contratado'],
-        [saldoTop>=0?'#1a6b35':'#b91c1c','Saldo Take or Pay',fmt(Math.abs(saldoTop)),'m³'],
-        [backlog>=0?'#1a6b35':'#b91c1c','Backlog Recebimento',fmt(Math.abs(backlog)),backlog>=0?'Acima do previsto':'Pendência'],
-        ['#1a3a6b','Vol. Projetado',fmt(volProjetado),'m³ estimado mês'],
+        ['Vol. Recebido Caminhões',fmt(volRecebido),'m³ no mês',col,null],
+        ['Expedido Ferrovia',fmt(expFerro),'m³ no mês',col,null],
+        ['Expedido Rodo/Transf.',fmt(expRodo),'m³ no mês',col,null],
+        ['Take or Pay / Mês',fmt(top),'m³ contratado',col,null],
+        ['Saldo Take or Pay',fmt(Math.abs(saldoTop)),'m³',saldoTop>=0?C.green:C.red,saldoTop>=0?C.green:C.red],
+        ['Backlog Recebimento',fmt(Math.abs(backlog)),backlog>=0?'Acima do previsto':'Pendência',backlog>=0?C.green:C.red,backlog>=0?C.green:C.red],
+        ['Vol. Projetado',fmt(projetado),'m³ estimado mês','#7c3aed',null],
       ];
-      const kpiW=(W-2*M)/kpis1.length, kpiH=15, kpiY=15;
-      kpis1.forEach(([ac,lb,vl,sb],i)=>drawKpi(M+i*kpiW, kpiY, kpiW-1, kpiH, ac, lb, vl, sb));
+      kpis1.forEach(([lb,vl,sb,ac,vc],i)=>kpi(M+i*(KW+0.8),KY,KW,KH,lb,vl,sb,ac,vc));
 
-      // ── KPI Row 2 ──
+      const KY2=KY+KH+1.5, KW2=(W-2*M)/5-0.8;
       const kpis2=[
-        ['#1a3a6b','Trânsito Caminhões',fmt(transitoVol),'m³ a chegar'],
-        ['#f0a500','Estática Hidratado',fmt(estatHid),'m³ contratado'],
-        ['#f0a500','Estática Anidro',fmt(estatAni),'m³ contratado'],
-        ['#f0a500','Giro (×Estática)',giro.toFixed(2)+'×','vezes a estática recebida'],
-        ['#7a5200','Previsão Custo Mês','R$ '+(custo>0?Math.round(custo).toLocaleString('pt-BR'):'-'),tarifa>0?fmt(volRecebido)+' m³ × R$ '+tarifa.toFixed(2)+'/m³':'Configure tarifa'],
+        ['Trânsito Caminhões',fmt(transitoVol),'m³ a chegar',col,null],
+        ['Estática Hidratado',fmt(estatHid),'m³ contratado',C.gold,null],
+        ['Estática Anidro',fmt(estatAni),'m³ contratado',C.gold,null],
+        ['Giro (×Estática)',giro.toFixed(2)+'×','vezes recebida',C.gold,null],
+        ['Previsão Custo Mês',tarifa>0?'R$ '+Math.round(custo).toLocaleString('pt-BR'):'-',tarifa>0?fmt(volRecebido)+' m³ × R$ '+tarifa.toFixed(2)+'/m³':'Configure tarifa em Configurações','#78350f',null],
       ];
-      const k2W=(W-2*M)/kpis2.length, k2Y=kpiY+kpiH+2;
-      kpis2.forEach(([ac,lb,vl,sb],i)=>drawKpi(M+i*k2W, k2Y, k2W-1, kpiH, ac, lb, vl, sb));
+      kpis2.forEach(([lb,vl,sb,ac,vc],i)=>kpi(M+i*(KW2+0.8),KY2,KW2,KH,lb,vl,sb,ac,vc));
 
-      // ── DADOS DOS 3 GRÁFICOS ──
+      // ── 3 CHARTS ──
       const days=Array.from({length:diasMes},(_,i)=>i+1);
-      const lbl30=days.map(d=>String(d));
-
-      // Descarga Rodoviária (por filial)
       const sinopD=days.map(d=>descMes.filter(r=>new Date(r.data+'T12:00:00').getDate()===d&&r.filial==='Sinop').reduce((s,r)=>s+r.pesoDst,0)/1000||null);
       const nmD=days.map(d=>descMes.filter(r=>new Date(r.data+'T12:00:00').getDate()===d&&r.filial==='Nova Mutum').reduce((s,r)=>s+r.pesoDst,0)/1000||null);
+      const carrFD=days.map(d=>notasMes.filter(r=>r.modal==='Ferroviário'&&new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000||null);
+      const carrRD=days.map(d=>notasMes.filter(r=>r.modal==='Rodoviário'&&new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000||null);
+      const carrTD=days.map(d=>notasMes.filter(r=>r.modal==='Transferência em Tanque'&&new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000||null);
+      const estT=db.estoque.filter(r=>r.terminal===t&&r.data&&r.data.startsWith(curM));
+      const estHD=days.map(d=>{const ds=cy2+'-'+String(cm2).padStart(2,'0')+'-'+String(d).padStart(2,'0');const r=estT.find(e=>e.data===ds&&e.produto==='Hidratado');return r?(r.saldoAtual||0)/1000:null;});
+      const estAD=days.map(d=>{const ds=cy2+'-'+String(cm2).padStart(2,'0')+'-'+String(d).padStart(2,'0');const r=estT.find(e=>e.data===ds&&e.produto==='Anidro');return r?(r.saldoAtual||0)/1000:null;});
 
-      // Carregamentos (Ferro / Rodo / Transf por modal)
-      const carrFerroD=days.map(d=>notasMes.filter(r=>r.modal==='Ferroviário'&&new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000||null);
-      const carrRodoD=days.map(d=>notasMes.filter(r=>r.modal==='Rodoviário'&&new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000||null);
-      const carrTransfD=days.map(d=>notasMes.filter(r=>r.modal==='Transferência em Tanque'&&new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000||null);
+      const CY0=KY2+KH+2.5, CW_=W-2*M, CH0=30;
+      // Chart titles
+      sectionTitle(M,CY0-1,'DESCARGA RODOVIÁRIA',col);
+      barChart(M,CY0,CW_,CH0,days,
+        [{label:'Sinop',data:sinopD,color:'#1a3a6b'},{label:'Nova Mutum',data:nmD,color:'#c8922a'}]);
 
-      // Abertura de Estoque (Hidratado / Anidro)
-      const estoqueT=db.estoque.filter(r=>r.terminal===t&&r.data&&r.data.startsWith(curM));
-      const estHidD=days.map(d=>{
-        const ds=cy2+'-'+String(cm2).padStart(2,'0')+'-'+String(d).padStart(2,'0');
-        const r=estoqueT.find(e=>e.data===ds&&e.produto==='Hidratado');
-        return r?(r.saldoAtual||0)/1000:null;
-      });
-      const estAniD=days.map(d=>{
-        const ds=cy2+'-'+String(cm2).padStart(2,'0')+'-'+String(d).padStart(2,'0');
-        const r=estoqueT.find(e=>e.data===ds&&e.produto==='Anidro');
-        return r?(r.saldoAtual||0)/1000:null;
-      });
+      sectionTitle(M,CY0+CH0+3.5,'CARREGAMENTOS — FERRO / RODO / TRANSF',col);
+      barChart(M,CY0+CH0+4.5,CW_,CH0,days,
+        [{label:'Ferrovia',data:carrFD,color:'#1a3a6b'},{label:'Rodoviário',data:carrRD,color:'#c8922a'},{label:'Transf.',data:carrTD,color:'#0e6674'}].filter(ds=>ds.data.some(v=>v)));
 
-      // ── GRÁFICOS + TABELAS na mesma página ──
-      const CW=W-2*M;
-      const CH=33;
-      const CT=k2Y+kpiH+3;
+      sectionTitle(M,CY0+2*CH0+8,'ABERTURA DE ESTOQUE',col);
+      barChart(M,CY0+2*CH0+9,CW_,CH0-4,days,
+        [{label:'Hidratado',data:estHD,color:'#1a3a6b'},{label:'Anidro',data:estAD,color:'#c8922a'}].filter(ds=>ds.data.some(v=>v)));
 
-      // ── GRÁFICO 1: Descarga Rodoviária ──
-      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(6.5);
-      pdf.text('DESCARGA RODOVIÁRIA', M, CT-1);
-      drawBarChart(M, CT, CW, CH, lbl30,
-        [{label:'Sinop',data:sinopD,borderColor:'#1a3a6b'},{label:'Nova Mutum',data:nmD,borderColor:'#f0a500'}], 'm³');
-
-      // ── GRÁFICO 2: Carregamentos ──
-      const CT2=CT+CH+4;
-      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(6.5);
-      pdf.text('CARREGAMENTOS — FERRO / RODO / TRANSF', M, CT2-1);
-      const carrDS=[
-        {label:'Ferrovia',data:carrFerroD,borderColor:'#1a3a6b'},
-        {label:'Rodoviário',data:carrRodoD,borderColor:'#f0a500'},
-        {label:'Transf.',data:carrTransfD,borderColor:'#1a6b35'},
-      ].filter(ds=>ds.data.some(v=>v));
-      drawBarChart(M, CT2, CW, CH, lbl30, carrDS.length?carrDS:[{label:'Total',data:lbl30.map(()=>null),borderColor:'#1a3a6b'}], 'm³');
-
-      // ── GRÁFICO 3: Abertura de Estoque ──
-      const CT3=CT2+CH+4;
-      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5);
-      pdf.text('ABERTURA DE ESTOQUE', M, CT3-1);
-      const estDS=[
-        {label:'Hidratado',data:estHidD,borderColor:'#1a3a6b'},
-        {label:'Anidro',data:estAniD,borderColor:'#f0a500'},
-      ].filter(ds=>ds.data.some(v=>v));
-      drawBarChart(M, CT3, CW, CH, lbl30, estDS.length?estDS:[{label:'Sem dados',data:lbl30.map(()=>null),borderColor:'#9aa3bb'}], 'm³');
-
-      // ── TABELAS: 4 tabelas 2x2 ──
-      const tblY=CT3+CH+3;
-      const tblHalf=(W-2*M)/2-3;
-      const tblCols=[['',6],['Data',26],['Sinop',24,'right'],['N.Mutum',24,'right'],['Total',22,'right']];
+      // ── TABLES (4 tables, 2×2) ──
+      const TY=CY0+3*CH0+8, THalf=(W-2*M)/2-3, QX=M+THalf+6;
+      const TC=[['',5],['Data',26],['Sinop',24,'right'],['N.Mutum',24,'right'],['Total',22,'right']];
       const todayD2=new Date(today2+'T12:00:00');
-      const qX=M+tblHalf+6;
 
-      // ── TOP-LEFT: Carregamento Usina ──
-      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(6.5);
-      pdf.text('CARREGAMENTO USINA', M, tblY+3);
-      drawTableHeader(M,tblY+4,tblHalf,tblCols,color);
-      let usTotal=[0,0];
-      ['D','D-1','D-2','D-3'].forEach((lbl,i)=>{
+      // TOP-LEFT: Carregamento Usina
+      sectionTitle(M,TY,'CARREGAMENTO USINA',col);
+      tableHeader(M,TY+1.5,THalf,TC,col);
+      let usS=0,usN=0;
+      ['D','D-1','D-2','D-3'].forEach((lb,i)=>{
         const dd=new Date(todayD2); dd.setDate(dd.getDate()-i);
         const ds=localDateStr(dd);
-        const rows2=db.notas.filter(r=>r.clienteCod===clienteCod&&r.data===ds);
-        const s2=rows2.filter(r=>r.filial==='Sinop').reduce((a,r)=>a+r.qtde,0)/1000;
-        const n2=rows2.filter(r=>r.filial==='Nova Mutum').reduce((a,r)=>a+r.qtde,0)/1000;
-        usTotal[0]+=s2; usTotal[1]+=n2;
-        drawTableRow(M,tblY+9+i*4.8,tblHalf,tblCols,
-          [lbl,fmtDate(ds),s2?fmt(s2):'-',n2?fmt(n2):'-',(s2+n2)?fmt(s2+n2):'-'],
-          i%2?'#f7f9fd':null,'#1a2340');
+        const r2=db.notas.filter(r=>r.clienteCod===clienteCod&&r.data===ds);
+        const s2=r2.filter(r=>r.filial==='Sinop').reduce((a,r)=>a+r.qtde,0)/1000;
+        const n2=r2.filter(r=>r.filial==='Nova Mutum').reduce((a,r)=>a+r.qtde,0)/1000;
+        usS+=s2; usN+=n2;
+        tableRow(M,TY+7+i*5,THalf,TC,[lb,fmtDate(ds),s2?fmt(s2):'-',n2?fmt(n2):'-',(s2+n2)?fmt(s2+n2):'-'],i%2?C.bg:null);
       });
-      drawTableRow(M,tblY+28.2,tblHalf,tblCols,
-        ['Total','',fmt(usTotal[0]),fmt(usTotal[1]),fmt(usTotal[0]+usTotal[1])],
-        '#e8eef8','#1a3a6b');
+      tableRow(M,TY+27,THalf,TC,['Total','',fmt(usS),fmt(usN),fmt(usS+usN)],'#dce7f5','#1a3a6b',true);
 
-      // ── TOP-RIGHT: Quebra Mensal ──
-      const qCols=[['Filial',40],['Entrada m³',33,'right'],['Quebra m³',30,'right'],['Índice',22,'right']];
-      setTxt(color); pdf.setFont('helvetica','bold'); pdf.setFontSize(6.5);
-      pdf.text('QUEBRA MENSAL', qX, tblY+3);
-      drawTableHeader(qX,tblY+4,tblHalf,qCols,color);
-      let totE=0,totQ=0;
+      // TOP-RIGHT: Quebra Mensal
+      const QC=[['Filial',40],['Entrada m³',33,'right'],['Quebra m³',30,'right'],['Índice',25,'right']];
+      sectionTitle(QX,TY,'QUEBRA MENSAL',col);
+      tableHeader(QX,TY+1.5,THalf,QC,col);
+      let tE=0,tQ=0;
       ['Sinop','Nova Mutum'].forEach((f,i)=>{
         const sub=descMes.filter(r=>r.filial===f);
         const ent=sub.reduce((s,r)=>s+r.pesoDst,0)/1000;
         const qbr=sub.reduce((s,r)=>s+(r.quebra||0),0)/1000;
-        totE+=ent; totQ+=qbr;
-        drawTableRow(qX,tblY+9+i*4.8,tblHalf,qCols,
-          [f,fmt(ent),fmt(qbr),ent?(qbr/ent*100).toFixed(2)+'%':'-'],
-          i%2?'#f7f9fd':null);
+        tE+=ent; tQ+=qbr;
+        tableRow(QX,TY+7+i*5,THalf,QC,[f,fmt(ent),fmt(qbr),ent?(qbr/ent*100).toFixed(2)+'%':'-'],i%2?C.bg:null);
       });
-      drawTableRow(qX,tblY+18.6,tblHalf,qCols,
-        ['Total',fmt(totE),fmt(totQ),totE?(totQ/totE*100).toFixed(2)+'%':'-'],
-        '#e8eef8','#1a3a6b');
+      tableRow(QX,TY+17,THalf,QC,['Total',fmt(tE),fmt(tQ),tE?(tQ/tE*100).toFixed(2)+'%':'-'],'#dce7f5','#1a3a6b',true);
 
-      // ── BOTTOM-LEFT: Data Prevista ──
-      const tblY2=tblY+36;
+      // BOTTOM-LEFT: Data Prevista
+      const TY2=TY+34;
       const transit=db.transito.filter(r=>r.terminal===t);
-      const transitByDate2={};
-      transit.forEach(r=>{
-        if(!r.prevChegada) return;
-        if(!transitByDate2[r.prevChegada]) transitByDate2[r.prevChegada]={Sinop:0,'Nova Mutum':0};
-        transitByDate2[r.prevChegada][r.filial]=(transitByDate2[r.prevChegada][r.filial]||0)+r.pesoLiq/1000;
+      const tbd={};
+      transit.forEach(r=>{if(!r.prevChegada)return;if(!tbd[r.prevChegada])tbd[r.prevChegada]={S:0,N:0};tbd[r.prevChegada][r.filial==='Sinop'?'S':'N']+=(r.pesoLiq||0)/1000;});
+      sectionTitle(M,TY2,'DATA PREVISTA',C.green);
+      tableHeader(M,TY2+1.5,THalf,TC,C.green);
+      let fsS=0,fsN=0;
+      [0,1,2].forEach((o,i)=>{
+        const dd=new Date(todayD2); dd.setDate(dd.getDate()+o);
+        const ds=localDateStr(dd);
+        const s2=tbd[ds]?.S||0, n2=tbd[ds]?.N||0;
+        fsS+=s2; fsN+=n2;
+        tableRow(M,TY2+7+i*5,THalf,TC,[['D','D+1','D+2'][i],fmtDate(ds),s2?fmt(s2):'-',n2?fmt(n2):'-',(s2+n2)?fmt(s2+n2):'-'],i%2?'#f0fdf4':null);
       });
-      setTxt('#1a6b35'); pdf.setFont('helvetica','bold'); pdf.setFontSize(6.5);
-      pdf.text('DATA PREVISTA', M, tblY2+3);
-      drawTableHeader(M,tblY2+4,tblHalf,tblCols,'#1a6b35');
-      const futDates2=[0,1,2].map(o=>{const d=new Date(todayD2);d.setDate(d.getDate()+o);return localDateStr(d);});
-      let futTotal=[0,0];
-      ['D','D+1','D+2'].forEach((lbl,i)=>{
-        const ds=futDates2[i];
-        const s2=transitByDate2[ds]?.Sinop||0;
-        const n2=transitByDate2[ds]?.['Nova Mutum']||0;
-        futTotal[0]+=s2; futTotal[1]+=n2;
-        drawTableRow(M,tblY2+9+i*4.8,tblHalf,tblCols,
-          [lbl,fmtDate(ds),s2?fmt(s2):'-',n2?fmt(n2):'-',(s2+n2)?fmt(s2+n2):'-'],
-          i%2?'#f7f9fd':null,'#1a2340');
-      });
-      drawTableRow(M,tblY2+23.4,tblHalf,tblCols,
-        ['Total','',fmt(futTotal[0]),fmt(futTotal[1]),fmt(futTotal[0]+futTotal[1])],
-        '#e8eef8','#1a6b35');
+      tableRow(M,TY2+22,THalf,TC,['Total','',fmt(fsS),fmt(fsN),fmt(fsS+fsN)],'#bbf7d0','#166534',true);
 
-      // ── BOTTOM-RIGHT: Atrasado ──
-      setTxt('#b91c1c'); pdf.setFont('helvetica','bold'); pdf.setFontSize(6.5);
-      pdf.text('ATRASADO', qX, tblY2+3);
-      drawTableHeader(qX,tblY2+4,tblHalf,tblCols,'#b91c1c');
-      const atrasados2={};
+      // BOTTOM-RIGHT: Atrasado
+      sectionTitle(QX,TY2,'ATRASADO',C.red);
+      tableHeader(QX,TY2+1.5,THalf,TC,C.red);
+      const at={};
       transit.forEach(r=>{
         if(!r.prevChegada||r.prevChegada>=today2) return;
         const diff=Math.floor((todayD2-new Date(r.prevChegada+'T12:00:00'))/86400000);
-        const lbl2=diff===1?'D-1':diff===2?'D-2':diff===3?'D-3':'>D-3';
-        if(!atrasados2[lbl2]) atrasados2[lbl2]={Sinop:0,'Nova Mutum':0,date:r.prevChegada};
-        atrasados2[lbl2][r.filial]=(atrasados2[lbl2][r.filial]||0)+r.pesoLiq/1000;
+        const lb=diff===1?'D-1':diff===2?'D-2':diff===3?'D-3':'>D-3';
+        if(!at[lb])at[lb]={S:0,N:0,date:r.prevChegada};
+        at[lb][r.filial==='Sinop'?'S':'N']+=(r.pesoLiq||0)/1000;
       });
-      let atTotal=[0,0];
-      ['D-1','D-2','D-3','>D-3'].forEach((lbl,i)=>{
-        const a=atrasados2[lbl]||{Sinop:0,'Nova Mutum':0,date:''};
-        const s2=a.Sinop,n2=a['Nova Mutum'];
-        atTotal[0]+=s2; atTotal[1]+=n2;
-        drawTableRow(qX,tblY2+9+i*4.8,tblHalf,tblCols,
-          [lbl,fmtDate(a.date||''),s2?fmt(s2):'-',n2?fmt(n2):'-',(s2+n2)?fmt(s2+n2):'-'],
-          i%2?'#f7f9fd':null,s2+n2>0?'#b91c1c':'#1a2340');
+      let atS=0,atN=0;
+      ['D-1','D-2','D-3','>D-3'].forEach((lb,i)=>{
+        const a=at[lb]||{S:0,N:0,date:''};
+        atS+=a.S; atN+=a.N;
+        const tot=a.S+a.N;
+        tableRow(QX,TY2+7+i*5,THalf,TC,[lb,fmtDate(a.date||''),a.S?fmt(a.S):'-',a.N?fmt(a.N):'-',tot?fmt(tot):'-'],i%2?'#fff1f2':null,tot>0?C.red:null);
       });
-      drawTableRow(qX,tblY2+28.2,tblHalf,tblCols,
-        ['Total','',fmt(atTotal[0]),fmt(atTotal[1]),fmt(atTotal[0]+atTotal[1])],
-        '#e8eef8','#b91c1c');
-    } // end for termConfig
+      tableRow(QX,TY2+27,THalf,TC,['Total','',fmt(atS),fmt(atN),fmt(atS+atN)],'#fecdd3',C.red,true);
+    }
 
-    if(sections.ferro) {
-      prog(60, 'Gerando Ferrovia...');
-      if(!firstPage) pdf.addPage(); firstPage=false;
-      drawChrome('MONITORAMENTO FERROVIA — '+mesLbl);
+    // ═══════════════════════════════════════════
+    // FERROVIA PAGE
+    // ═══════════════════════════════════════════
+    if(sections.ferro){
+      prog(65,'Gerando Ferrovia...');
+      if(!first) pdf.addPage(); first=false;
+      chrome('MONITORAMENTO FERROVIA — '+mesLbl, C.gold);
 
       const [cy2,cm2]=curM.split('-').map(Number);
       const diasMes=new Date(cy2,cm2,0).getDate();
-      const _dn=new Date();
-      const today2=_dn.getFullYear()+'-'+String(_dn.getMonth()+1).padStart(2,'0')+'-'+String(_dn.getDate()).padStart(2,'0');
-      const diaAtual=curM===today2.substring(0,7)?_dn.getDate():diasMes;
+      const _d=new Date(), today2=localDateStr(_d);
+      const diaAtual=curM===today2.substring(0,7)?_d.getDate():diasMes;
       const diaD1=diaAtual-1;
       const ferroNotas=db.notas.filter(r=>r.modal==='Ferroviário'&&(r.terminal==='teciap'||r.terminal==='ultra')&&r.data&&r.data.startsWith(curM));
       const cfgF=(db.configHist[curM]||{}).ferro||db.config.ferro||{};
       const contrato=cfgF.contrato||88350, minimo=cfgF.minimo||Math.round(contrato*.95), tarifaF=cfgF.tarifa||0;
       const volCarreg=ferroNotas.reduce((s,r)=>s+r.qtde,0)/1000;
+      const volDescRumo=db.descargas.filter(r=>r.terminal&&r.terminal.startsWith('rumo_')&&r.data&&r.data.startsWith(curM)).reduce((s,r)=>s+r.pesoDst,0)/1000;
       const saldo=volCarreg-contrato;
       const ferroD1=ferroNotas.filter(r=>new Date(r.data+'T12:00:00').getDate()<=diaD1);
       const acumFD1=ferroD1.reduce((s,r)=>s+r.qtde,0)/1000;
       const diasFD1=new Set(ferroD1.filter(r=>r.qtde>0).map(r=>new Date(r.data+'T12:00:00').getDate())).size;
       const mediaF=diasFD1>0?acumFD1/diasFD1:0;
-      const projetado=diaD1>=diasMes?volCarreg:(acumFD1+mediaF*(diasMes-diaD1));
-      const saldoMin=volCarreg-minimo;
-      const custoF=tarifaF*volCarreg;
+      const projetadoF=diaD1>=diasMes?volCarreg:acumFD1+mediaF*(diasMes-diaD1);
+      let bkF=0; const mdF=contrato/diasMes;
+      for(let d=1;d<=diaD1;d++){const v=ferroNotas.filter(r=>new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000;bkF=v-mdF+(d===1?0:bkF);}
+      const saldoMin=volCarreg-minimo, custoF=tarifaF*volCarreg;
 
       // KPIs
-      const fKpis=[
-        ['#f0a500','Vol. Carregado Teciap/Ultra',fmt(volCarreg),'m³ no mês'],
-        ['#f0a500','Vol. Descarregado Rumo',fmt(db.descargas.filter(r=>r.terminal&&r.terminal.startsWith('rumo_')&&r.data&&r.data.startsWith(curM)).reduce((s,r)=>s+r.pesoDst,0)/1000),'m³ no mês'],
-        ['#f0a500','Contrato Transporte/Mês',fmt(contrato),'m³'],
-        [saldo<0?'#b91c1c':'#1a6b35','Saldo Contrato/Mês',fmt(Math.abs(saldo)),'m³'],
-        (()=>{let bfk=0,mdf=contrato/diasMes;for(let d=1;d<=diaD1;d++){const v=ferroNotas.filter(r=>new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000;bfk=v-mdf+(d===1?0:bfk);}return [bfk>=0?'#1a6b35':'#b91c1c','Backlog Carregamento',fmt(Math.abs(bfk)),bfk>=0?'Acima do previsto':'Pendência'];})(),
-        ['#1a6b35','Volume Projetado',fmt(projetado),'m³ estimado mês'],
-        ['#1a3a6b','Média Carregamento/dia',fmt(mediaF),'m³/dia'],
-        ['#f0a500','Volume Mínimo Rumo',fmt(minimo),'m³/mês'],
-        [saldoMin<0?'#b91c1c':'#1a6b35','Saldo Volume Mínimo',fmt(Math.abs(saldoMin)),'m³'],
+      const KY=17,KH=17;
+      const fkpis=[
+        ['Vol. Carregado\nTeciap/Ultra',fmt(volCarreg),'m³ no mês',C.gold,null],
+        ['Vol. Descarregado\nRumo',fmt(volDescRumo),'m³ no mês',C.gold,null],
+        ['Contrato\nTransporte/Mês',fmt(contrato),'m³',C.gold,null],
+        ['Saldo\nContrato/Mês',fmt(Math.abs(saldo)),'m³',saldo<0?C.red:C.green,saldo<0?C.red:C.green],
+        ['Backlog\nCarregamento',fmt(Math.abs(bkF)),bkF>=0?'Acima do previsto':'Pendência',bkF>=0?C.green:C.red,bkF>=0?C.green:C.red],
+        ['Volume\nProjetado',fmt(projetadoF),'m³ estimado mês','#7c3aed',null],
+        ['Média\nCarregamento/dia',fmt(mediaF),'m³/dia',C.blue,null],
+        ['Volume\nMínimo Rumo',fmt(minimo),'m³/mês',C.gold,null],
+        ['Saldo\nVolume Mínimo',fmt(Math.abs(saldoMin)),'m³',saldoMin<0?C.red:C.green,saldoMin<0?C.red:C.green],
+        ['Previsão Custo\nFerrovia',tarifaF>0?'R$ '+Math.round(custoF).toLocaleString('pt-BR'):'-',tarifaF>0?fmt(volCarreg)+' m³ × R$'+tarifaF.toFixed(2)+'/m³':'Configure tarifa','#78350f',null],
       ];
-      const fkW=(W-2*M)/fKpis.length, fkH=24, fkY=15.5;
-      fKpis.forEach(([ac,lb,vl,sb],i)=>drawKpi(M+i*fkW, fkY, fkW-1, fkH, ac, lb.replace('\n',' '), vl, sb));
+      const fkW=(W-2*M)/fkpis.length-0.5;
+      fkpis.forEach(([lb,vl,sb,ac,vc],i)=>kpi(M+i*(fkW+0.5),KY,fkW,KH,lb.replace('\n',' '),vl,sb,ac,vc));
 
-      // Previsão Custo KPI
-      if(tarifaF>0){
-        drawKpi(M, fkY+fkH+2, 55, fkH, '#7a5200','Previsão Custo Ferrovia',
-          'R$ '+Math.round(custoF).toLocaleString('pt-BR'),
-          fmt(volCarreg)+' m³ × R$ '+tarifaF.toFixed(2)+'/m³');
-      }
-
-      // ── CHART: Carregamento Ferroviário por dia ──
+      // Chart: Carregamento Ferroviário
       const days=Array.from({length:diasMes},(_,i)=>i+1);
       const lbl30=days.map(d=>d+'/'+String(cm2).padStart(2,'0'));
-      const DEST_CODS2=[11966,7605];
-      const DEST_COLORS={'11966':'#1a3a6b','7605':'#f0a500'};
-      const DEST_NAMES={'11966':'Logum','7605':'Paulínia'};
-      const ferroDatasets=DEST_CODS2.map(cod=>{
-        const destLbl=cod===11966?'LOGUM':'PAULIN';
-        return {
-          label:DEST_NAMES[cod],
-          borderColor:DEST_COLORS[cod],
-          data:days.map(d=>ferroNotas.filter(r=>new Date(r.data+'T12:00:00').getDate()===d&&(r.nomeCliente||'').toUpperCase().includes(destLbl)).reduce((s,r)=>s+r.qtde,0)/1000||null)
-        };
-      }).filter(ds=>ds.data.some(v=>v));
+      const DEST_INFO={11966:{label:'Logum',color:'#1a3a6b'},7605:{label:'Paulínia',color:'#c8922a'},3492:{label:'Dest.3492',color:'#0e6674'}};
+      const fDS=Object.entries(DEST_INFO).map(([cod,info])=>({
+        label:info.label, color:info.color,
+        data:days.map(d=>ferroNotas.filter(r=>new Date(r.data+'T12:00:00').getDate()===d&&(r.nomeCliente||'').toUpperCase().includes(info.label.toUpperCase().split(' ')[0])).reduce((s,r)=>s+r.qtde,0)/1000||null)
+      })).filter(ds=>ds.data.some(v=>v));
+      if(!fDS.length) fDS.push({label:'Total',color:C.gold,data:days.map(d=>ferroNotas.filter(r=>new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000||null)});
 
-      const chartTop=fkY+fkH+2+fkH+4;
-      const chartH2=52, chartW2=175;
-      setTxt('#1a3a6b'); pdf.setFont('helvetica','bold'); pdf.setFontSize(8);
-      pdf.text('CARREGAMENTO FERROVIÁRIO — TECIAP / ULTRACARGO', M, chartTop-1);
-      drawBarChart(M, chartTop, chartW2, chartH2, lbl30, ferroDatasets.length?ferroDatasets:[{label:'Total',data:days.map(d=>ferroNotas.filter(r=>new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000||null),borderColor:'#f0a500'}], 'm³');
+      const CY0=KY+KH+2.5, CW_=W-2*M-100, CH0=62;
+      sectionTitle(M,CY0-1,'CARREGAMENTO FERROVIÁRIO — TECIAP / ULTRACARGO',C.blue);
+      barChart(M,CY0,CW_,CH0,lbl30,fDS);
 
-      // ── TABLE: Carregamento por Destino ──
-      const tX=M+chartW2+4, tY=chartTop, tW=W-M-tX;
+      // Table: Carregamento por Destino
+      const tX=M+CW_+4, tW=W-M-tX;
       const clienteSet2=new Set();
       ferroNotas.forEach(r=>{const c=(r.nomeCliente||'').trim();if(c)clienteSet2.add(c);});
       const cliList=Array.from(clienteSet2).sort();
-      setTxt('#1a3a6b'); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5);
-      pdf.text('CARREGAMENTO POR DESTINO', tX, tY+3);
-      const dColsFixed=14, dTotalFixed=14;
-      const dCliW = cliList.length>0 ? (tW-dColsFixed-dTotalFixed)/cliList.length : tW-28;
-      const dCols=[['Data',dColsFixed],...cliList.map(c=>{
-        const lbl=c.length>12?c.substring(0,11)+'.':(c);
-        return [lbl, Math.max(dCliW,18), 'right'];
-      }),['Total',dTotalFixed,'right']];
-      drawTableHeader(tX, tY+4, tW, dCols, '#1a3a6b');
-      let rowIdx=0, grandT=0;
+      sectionTitle(tX,CY0-1,'CARREGAMENTO POR DESTINO',C.blue);
+      // Dynamic columns
+      const dtW=12, totW=16, cliW=(tW-dtW-totW)/Math.max(cliList.length,1);
+      const dCols2=[['Data',dtW],...cliList.map(c=>[c.length>10?c.substring(0,9)+'.':c,cliW,'right']),['Total',totW,'right']];
+      tableHeader(tX,CY0,tW,dCols2,C.blue);
+      let rowIdx=0, grandT=0, colTots={};
+      cliList.forEach(c=>colTots[c]=0);
       days.forEach(d=>{
         const date=cy2+'-'+String(cm2).padStart(2,'0')+'-'+String(d).padStart(2,'0');
         const dn=ferroNotas.filter(r=>r.data===date);
         if(!dn.length) return;
         const dt=dn.reduce((s,r)=>s+r.qtde,0)/1000;
         grandT+=dt;
-        const vals=[d+'/'+String(cm2).padStart(2,'0'),...cliList.map(c=>fmt(dn.filter(r=>(r.nomeCliente||'')===c).reduce((s,r)=>s+r.qtde,0)/1000)||'-'),fmt(dt)];
-        drawTableRow(tX, tY+10+rowIdx*5, tW, dCols, vals, rowIdx%2?'#f7f9fd':null);
+        const vals=[d+'/'+String(cm2).padStart(2,'0'),...cliList.map(c=>{const v=dn.filter(r=>(r.nomeCliente||'')===c).reduce((s,r)=>s+r.qtde,0)/1000;colTots[c]+=v;return v?fmt(v):'-';}),fmt(dt)];
+        tableRow(tX,CY0+5.5+rowIdx*4.5,tW,dCols2,vals,rowIdx%2?C.bg:null);
         rowIdx++;
       });
-      drawTableRow(tX, tY+10+rowIdx*5, tW, dCols,
-        ['Total',...cliList.map(c=>fmt(ferroNotas.filter(r=>(r.nomeCliente||'')===c).reduce((s,r)=>s+r.qtde,0)/1000)),fmt(grandT)],
-        '#e8eef8', '#1a3a6b');
+      tableRow(tX,CY0+5.5+rowIdx*4.5,tW,dCols2,['Total',...cliList.map(c=>colTots[c]?fmt(colTots[c]):'-'),fmt(grandT)],'#dce7f5','#1a3a6b',true);
     }
 
     // ═══════════════════════════════════════════
-    // TAKE OR PAY PAGE
+    // TAKE OR PAY
     // ═══════════════════════════════════════════
-    if(sections.top) {
-      prog(80, 'Gerando Take or Pay...');
-      if(!firstPage) pdf.addPage(); firstPage=false;
-      drawChrome('TAKE OR PAY FERROVIA — '+cy);
+    if(sections.top){
+      prog(82,'Gerando Take or Pay...');
+      if(!first) pdf.addPage(); first=false;
+      chrome('TAKE OR PAY FERROVIA — '+cY, C.gold);
 
       const notasF=db.notas.filter(r=>r.modal==='Ferroviário'&&(r.terminal==='teciap'||r.terminal==='ultra'));
-      const mVol=m=>{const p=String(m+1).padStart(2,'0');return notasF.filter(r=>r.data&&r.data.startsWith(cy+'-'+p)).reduce((s,r)=>s+r.qtde,0)/1000;};
-      const gContrato=m=>{const mk=cy+'-'+String(m+1).padStart(2,'0');return(db.configHist[mk]||{}).ferro?.contrato||88350;};
-      const gMinimo=m=>{const mk=cy+'-'+String(m+1).padStart(2,'0');const cfg=(db.configHist[mk]||{}).ferro;return cfg?.minimo||(cfg?.contrato?Math.round(cfg.contrato*.95):83933);};
+      const mVol=m=>{const p=String(m+1).padStart(2,'0');return notasF.filter(r=>r.data&&r.data.startsWith(cY+'-'+p)).reduce((s,r)=>s+r.qtde,0)/1000;};
+      const gCon=m=>{const mk=cY+'-'+String(m+1).padStart(2,'0');return(db.configHist[mk]||{}).ferro?.contrato||88350;};
+      const gMin=m=>{const mk=cY+'-'+String(m+1).padStart(2,'0');const c=(db.configHist[mk]||{}).ferro;return c?.minimo||(c?.contrato?Math.round(c.contrato*.95):83933);};
 
-      const TOP_COLS=[['Mês',22],['Faturado',25,'right'],['Mín.Contratual',30,'right'],['Índice',16,'right'],['Contrato',28,'right'],['Índice',16,'right']];
-      const TOP_W=137;
-      const tY2=16;
+      const idxColor=p=>p>=100?C.green:p>=80?'#92400e':C.red;
+      const idxBg=p=>p>=100?'#dcfce7':p>=80?'#fef3c7':'#fee2e2';
 
-      // Annual table (left)
-      setTxt('#1a3a6b'); pdf.setFont('helvetica','bold'); pdf.setFontSize(9);
-      pdf.text('ANUAL', M, tY2+3);
-      drawTableHeader(M, tY2+4, TOP_W, TOP_COLS, '#1a3a6b');
+      // Annual table
+      const AX=M, AW=130;
+      const ACOLS=[['Mês',22],['Faturado',26,'right'],['Mín.Contratual',32,'right'],['Índice',16,'right'],['Contrato',26,'right'],['Índice',16,'right']];
+      sectionTitle(AX,17,'ANUAL — '+cY,C.blue);
+      tableHeader(AX,19,AW,ACOLS,C.blue);
       let totF=0,totMin=0,totCon=0;
       for(let m=0;m<12;m++){
-        const fat=mVol(m),mn=gMinimo(m),cn=gContrato(m);
-        totF+=fat; totMin+=mn; totCon+=cn;
-        const im=mn?Math.round(fat/mn*100):0;
-        const ic=cn?Math.round(fat/cn*100):0;
-        const pc=im>=100?'#1a6b35':im>=80?'#f0a500':'#b91c1c';
-        const bg=m%2?'#f7f9fd':null;
-        const vals=[MONTHS[m], fat?fmt(fat):'-', fmt(mn), fat?im+'%':'-', fmt(cn), fat?ic+'%':'-'];
-        drawTableRow(M, tY2+10+m*5.5, TOP_W, TOP_COLS, vals, bg,
-          fat&&im<80?'#b91c1c':fat&&im>=100?'#1a6b35':'#1a2340');
+        const fat=mVol(m),mn=gMin(m),cn=gCon(m);
+        totF+=fat;totMin+=mn;totCon+=cn;
+        const im=mn?Math.round(fat/mn*100):0, ic=cn?Math.round(fat/cn*100):0;
+        const rowBg=fat?(im>=100?'#f0fdf4':im>=80?'#fffbeb':'#fff1f2'):null;
+        tableRow(AX,24.5+m*5.5,AW,ACOLS,
+          [MONTHS[m],fat?fmt(fat):'-',fmt(mn),fat?im+'%':'-',fmt(cn),fat?ic+'%':'-'],
+          m%2?C.bg:rowBg, fat&&im<80?C.red:fat&&im>=100?C.green:C.text);
       }
-      const totIm=totMin?Math.round(totF/totMin*100):0;
-      drawTableRow(M, tY2+10+12*5.5, TOP_W, TOP_COLS,
-        ['Total',fmt(totF),fmt(totMin),totF?totIm+'%':'-',fmt(totCon),totF?Math.round(totF/totCon*100)+'%':'-'],
-        '#e8eef8','#1a3a6b');
+      const ti=totMin?Math.round(totF/totMin*100):0;
+      tableRow(AX,24.5+12*5.5,AW,ACOLS,['Total',fmt(totF),fmt(totMin),totF?ti+'%':'-',fmt(totCon),totF?Math.round(totF/totCon*100)+'%':'-'],'#dce7f5','#1a3a6b',true);
 
-      // Quarterly tables (right) - 2x2 grid
-      const qX=M+TOP_W+6, qW=W-M-qX;
-      const TRIM=[['1º TRIMESTRE',[0,1,2]],['2º TRIMESTRE',[3,4,5]],['3º TRIMESTRE',[6,7,8]],['4º TRIMESTRE',[9,10,11]]];
-      // Trimestral: sem coluna Contrato (já mostrado no anual) para caber na largura
-      const TRIM_COLS=[['Mês',20],['Faturado',24,'right'],['Mín.Cont.',26,'right'],['Índice',14,'right']];
-      TRIM.forEach(([lbl,months],qi)=>{
-        const col=qi%2, row=Math.floor(qi/2);
-        const qx2=qX+col*(qW/2+2), qy2=tY2+row*55;
-        const qw2=qW/2-2;
-        setTxt('#1a3a6b'); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5);
-        pdf.text(lbl, qx2, qy2+3);
-        drawTableHeader(qx2, qy2+4, qw2, TRIM_COLS, '#1a3a6b');
-        let tF=0,tM=0,tC=0;
+      // Quarterly tables in 2x2 grid
+      const QX2=AX+AW+6, QW=(W-M-QX2)/2-3;
+      const QCOLS=[['Mês',20],['Faturado',24,'right'],['Mín.Cont.',26,'right'],['Índice',16,'right']];
+      const TRIMS=[['1º TRIMESTRE',[0,1,2]],['2º TRIMESTRE',[3,4,5]],['3º TRIMESTRE',[6,7,8]],['4º TRIMESTRE',[9,10,11]]];
+      TRIMS.forEach(([lbl,months],qi)=>{
+        const col_=qi%2, row=Math.floor(qi/2);
+        const qx=QX2+col_*(QW+6), qy=17+row*58;
+        sectionTitle(qx,qy,lbl,C.blue);
+        tableHeader(qx,qy+2,QW,QCOLS,C.blue);
+        let tF=0,tM=0;
         months.forEach((m,i)=>{
-          const fat=mVol(m),mn=gMinimo(m),cn=gContrato(m);
-          tF+=fat;tM+=mn;tC+=cn;
+          const fat=mVol(m),mn=gMin(m),cn=gCon(m);
+          tF+=fat;tM+=mn;
           const im=mn?Math.round(fat/mn*100):0;
-          const pc=im>=100?'#1a6b35':im>=80?'#f0a500':'#b91c1c';
-          drawTableRow(qx2,qy2+10+i*5.5,qw2,TRIM_COLS,
-            [MONTHS[m],fat?fmt(fat):'-',fmt(mn),fat?im+'%':'-',fmt(cn),fat?Math.round(fat/cn*100)+'%':'-'],
-            i%2?'#f7f9fd':null, fat&&im<100?'#b91c1c':fat?'#1a6b35':'#1a2340');
+          const rowBg=fat?(im>=100?'#f0fdf4':im>=80?'#fffbeb':'#fff1f2'):i%2?C.bg:null;
+          tableRow(qx,qy+7.5+i*5.5,QW,QCOLS,
+            [MONTHS[m],fat?fmt(fat):'-',fmt(mn),fat?im+'%':'-'],
+            rowBg, fat&&im<80?C.red:fat&&im>=100?C.green:C.text);
         });
         const tIm=tM?Math.round(tF/tM*100):0;
-        drawTableRow(qx2,qy2+10+3*5.5,qw2,TRIM_COLS,
-          ['Total',tF?fmt(tF):'-',fmt(tM),tF?tIm+'%':'-'],
-          '#e8eef8','#1a3a6b');
+        tableRow(qx,qy+7.5+3*5.5,QW,QCOLS,['Total',tF?fmt(tF):'-',fmt(tM),tF?tIm+'%':'-'],'#dce7f5','#1a3a6b',true);
       });
     }
 
-    prog(95,'Salvando PDF...');
+    prog(96,'Salvando PDF...');
     await new Promise(r=>setTimeout(r,200));
-    const today_fn=new Date();
-    const dStr=today_fn.getDate()+'_'+(today_fn.getMonth()+1)+'_'+today_fn.getFullYear();
-    pdf.save('Dashboard_Logistica_'+curM+'_'+dStr+'.pdf');
-    prog(100,'✅ PDF gerado com sucesso!');
-    setTimeout(()=>{ progDiv.style.display='none'; },2500);
+    const _fd=new Date();
+    pdf.save('Dashboard_Logistica_'+curM+'_'+_fd.getDate()+'_'+(_fd.getMonth()+1)+'_'+_fd.getFullYear()+'.pdf');
+    prog(100,'✅ PDF gerado!');
+    setTimeout(()=>{document.getElementById('pdfProgress').style.display='none';},3000);
 
   } catch(err) {
-    console.error('PDF error:', err);
-    progText.textContent='❌ Erro: '+err.message;
+    console.error('PDF error:',err);
+    document.getElementById('pdfProgressText').textContent='❌ Erro: '+err.message;
     document.getElementById('pdfOverlay').classList.add('open');
   }
 }
