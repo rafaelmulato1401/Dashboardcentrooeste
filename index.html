@@ -2713,7 +2713,14 @@ async function gerarPDF() {
       ['D','D-1','D-2','D-3'].forEach((lb,i)=>{
         const dd=new Date(todayD2);dd.setDate(dd.getDate()-i);
         const ds=localDateStr(dd);
-        const r2=db.notas.filter(r=>r.clienteCod===clienteCod&&r.data===ds);
+        // Mesma lógica robusta do app: trata number/string e fallback em r.cliente
+        const r2=db.notas.filter(r=>{
+          if(!r.data||r.data!==ds) return false;
+          const cli=typeof r.clienteCod==='number'?r.clienteCod
+                   :typeof r.cliente==='number'?r.cliente
+                   :parseFloat(r.clienteCod||r.cliente||0);
+          return cli===clienteCod;
+        });
         const s2=r2.filter(r=>r.filial==='Sinop').reduce((a,r)=>a+r.qtde,0)/1000;
         const n2=r2.filter(r=>r.filial==='Nova Mutum').reduce((a,r)=>a+r.qtde,0)/1000;
         usS+=s2;usN+=n2;
