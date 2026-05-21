@@ -623,7 +623,7 @@
 // ============================================================
 // CONSTANTS
 // ============================================================
-const DB_KEYS = { descargas:'op_descargas', transito:'op_transito', notas:'op_notas', estoque:'op_estoque', transitoFerro:'op_transito_ferro', config:'op_config', configHist:'op_config_hist', produtoMap:'op_produto_map', nfClienteMap:'op_nf_cliente_map' };
+const DB_KEYS = { descargas:'op_descargas', transito:'op_transito', notas:'op_notas', estoque:'op_estoque', notasUsina:'op_notas_usina', transitoFerro:'op_transito_ferro', config:'op_config', configHist:'op_config_hist', produtoMap:'op_produto_map', nfClienteMap:'op_nf_cliente_map' };
 const TERMINAL_MAP = {
   teciap: {cod:[3490],   dep:[17],          name:'Teciap',        color:'#1a3a6b'},
   ultra:  {cod:[83868],  dep:[0.35,0.34],   name:'Ultracargo RO', color:'#0e6674'},
@@ -636,7 +636,7 @@ const MONTHS_SHORT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out
 // ============================================================
 // STATE
 // ============================================================
-let db = { descargas:[], transito:[], notas:[], estoque:[], transitoFerro:[], config:{}, configHist:{}, produtoMap:{}, nfClienteMap:{} };
+let db = { descargas:[], transito:[], notas:[], estoque:[], notasUsina:[], transitoFerro:[], config:{}, configHist:{}, produtoMap:{}, nfClienteMap:{} };
 
 // ── Helper: data local sem conversão UTC ──
 function localDateStr(d) {
@@ -691,8 +691,8 @@ async function loadDB() {
     catch(e) { return defaultVal; }
   }
 
-  [db.descargas, db.transito, db.notas, db.estoque, db.transitoFerro] = await Promise.all([
-    loadKey('descargas',[]), loadKey('transito',[]), loadKey('notas',[]), loadKey('estoque',[]), loadKey('transitoFerro',[]),
+  [db.descargas, db.transito, db.notas, db.estoque, db.notasUsina, db.transitoFerro] = await Promise.all([
+    loadKey('descargas',[]), loadKey('transito',[]), loadKey('notas',[]), loadKey('estoque',[]), loadKey('notasUsina',[]), loadKey('transitoFerro',[]),
   ]);
   db.config       = await loadKey('config',{});
   db.configHist   = await loadKey('configHist',{});
@@ -951,7 +951,7 @@ function processFile(file, type) {
       let added=0, skipped=0;
       if(type==='descargas') ({added,skipped}=processDescargas(rows));
       else if(type==='transito') { ({added,skipped}=processTransito(rows)); processTransitoFerro(rows); }
-      else if(type==='notas') ({added,skipped}=processNotas(rows));
+      else if(type==='notas') { ({added,skipped}=processNotas(rows)); processNotasUsina(rows); }
       saveDB(type);
       if(type==='notas') { saveDB('produtoMap').catch(()=>{}); saveDB('nfClienteMap').catch(()=>{}); }
       buildMonthFilter();
@@ -1178,12 +1178,10 @@ function processNotas(rows) {
     if(produto && nf) db.produtoMap[fNumNota+'_'+nf] = produto;
     // nfClienteMap: chave terminal_nf -> nomeCliente (para tabela de destinos)
     if(nomeClienteRaw && nf) db.nfClienteMap[terminal+'_'+nf] = nomeClienteRaw;
-    // clienteCod: Cód. Cliente (col 16) = quem RECEBE a NF (3490=Teciap, 83868=Ultra, 23184=Centro)
-    const clienteCodNF = (() => {
-      const v = r[clienteNomeIdx-1]; // col 16 = Cód. Cliente (col antes de Nome Cliente)
-      return typeof v==='number' ? v : parseFloat(String(v||'0'));
-    })();
-    db.notas.push({nf,terminal,filial,modal,rotina,qtde,data,dep:depKey,nomeCliente:nomeClienteRaw,produto,clienteCod:clienteCodNF});
+    // clienteCod via dep (para modal/ferrovia), clienteNota = Cód. Cliente real da NF
+    const TERM_CODS_MAP = {teciap:3490, ultra:83868, centro:23184};
+    const clienteCodTerminal = TERM_CODS_MAP[terminal] || 0;
+    db.notas.push({nf,terminal,filial,modal,rotina,qtde,data,dep:depKey,nomeCliente:nomeClienteRaw,produto,clienteCod:clienteCodTerminal});
     added++;
   }
   return {added,skipped};
@@ -1192,6 +1190,47 @@ function processNotas(rows) {
 // ============================================================
 // PROCESS ESTOQUE — FIX: r[0] pode ser número (OLE parse)
 // ============================================================
+function processNotasUsina(rows) {
+  if(!db.notasUsina) db.notasUsina = [];
+  let hdr = null, dataStart = 1;
+  for(let hi=0;hi<Math.min(5,rows.length);hi++){
+    const row=rows[hi]; if(!row) continue;
+    const rowStr=(row||[]).map(v=>String(v||'')).join(',');
+    if(rowStr.includes('GEF')||rowStr.includes('Nr. NF')){hdr=row;dataStart=hi+1;break;}
+  }
+  if(!hdr) return 0;
+  const cols={};
+  hdr.forEach((c,i)=>{if(c!=null&&c!=='')cols[String(c).trim()]=i;});
+  const cliIdx=cols['Cód. Cliente'], gefIdx=cols['GEF'];
+  const qtdeIdx=cols['Qtde'], emissIdx=cols['Data Emissão'], nfIdx=cols['Nr. NF'];
+  if(cliIdx===undefined||gefIdx===undefined||qtdeIdx===undefined) return 0;
+  const TERM_CLIS={3490:'teciap',83868:'ultra',23184:'centro'};
+  const existing=new Set(db.notasUsina.map(r=>r.nf+'_'+r.clienteCod));
+  let added=0;
+  for(let i=dataStart;i<rows.length;i++){
+    const r=rows[i]; if(!r) continue;
+    const cliRaw=r[cliIdx];
+    const cli=typeof cliRaw==='number'?cliRaw:parseFloat(String(cliRaw||'0'));
+    const terminal=TERM_CLIS[cli]; if(!terminal) continue;
+    const nf=String(r[nfIdx]||'').trim();
+    const key=nf+'_'+cli;
+    if(existing.has(key)) continue;
+    existing.add(key);
+    const gef=String(r[gefIdx]||'');
+    const fNum=gef.includes('-')?gef.split('-').pop().trim():'';
+    const filial=fNum==='1'?'Sinop':fNum==='3'?'Nova Mutum':null;
+    if(!filial) continue;
+    const qtdeRaw=r[qtdeIdx];
+    const qtde=typeof qtdeRaw==='number'?qtdeRaw:parseFloat(String(qtdeRaw||'0').replace(/[.]/g,'').replace(',','.'))||0;
+    const data=parseExcelDate(r[emissIdx]);
+    if(!data) continue;
+    db.notasUsina.push({nf,clienteCod:cli,terminal,filial,qtde,data});
+    added++;
+  }
+  if(added>0) saveDB('notasUsina').catch(()=>{});
+  return added;
+}
+
 function processEstoque(file, produto, data) {
   setStatus('estoque','info','⏳ Processando estoque...');
   const reader=new FileReader();
@@ -1577,14 +1616,9 @@ function renderTransitoTables(t, today) {
   // ── CARREGAMENTO USINA: vem das NOTAS FISCAIS por Cód. Cliente e Data Emissão ──
   // Usa db.notas filtrado pelo código do terminal (Cód. Cliente)
   // Qtde em litros / 1000 = m³, agrupado por data emissão e filial
+  // Carregamento Usina: usa db.notasUsina (filtrado por Cód. Cliente = código do terminal)
   const descByDate = {};
-  db.notas.filter(r => {
-    if(!r.data) return false;
-    const cli = typeof r.clienteCod === 'number' ? r.clienteCod
-              : typeof r.cliente === 'number' ? r.cliente
-              : parseFloat(r.clienteCod || r.cliente || 0);
-    return cli === clienteCod;
-  }).forEach(r => {
+  (db.notasUsina||[]).filter(r=>r.terminal===t&&r.data).forEach(r => {
     if(!descByDate[r.data]) descByDate[r.data] = { Sinop:0, 'Nova Mutum':0 };
     descByDate[r.data][r.filial] = (descByDate[r.data][r.filial]||0) + r.qtde/1000;
   });
@@ -2711,14 +2745,8 @@ async function gerarPDF() {
       ['D','D-1','D-2','D-3'].forEach((lb,i)=>{
         const dd=new Date(todayD2);dd.setDate(dd.getDate()-i);
         const ds=localDateStr(dd);
-        // Mesma lógica robusta do app: trata number/string e fallback em r.cliente
-        const r2=db.notas.filter(r=>{
-          if(!r.data||r.data!==ds) return false;
-          const cli=typeof r.clienteCod==='number'?r.clienteCod
-                   :typeof r.cliente==='number'?r.cliente
-                   :parseFloat(r.clienteCod||r.cliente||0);
-          return cli===clienteCod;
-        });
+        // Carregamento Usina: usa db.notasUsina (filtrado por Cód. Cliente)
+        const r2=(db.notasUsina||[]).filter(r=>r.terminal===t&&r.data===ds);
         const s2=r2.filter(r=>r.filial==='Sinop').reduce((a,r)=>a+r.qtde,0)/1000;
         const n2=r2.filter(r=>r.filial==='Nova Mutum').reduce((a,r)=>a+r.qtde,0)/1000;
         usS+=s2;usN+=n2;
