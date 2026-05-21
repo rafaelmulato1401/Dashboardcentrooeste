@@ -1528,11 +1528,12 @@ function renderTerminal(t) {
   // ── GRÁFICO 3: ABERTURA DE ESTOQUE — stacked Hidratado + Anidro ──
   const estHidByDay = days.map(d => {
     const rs = estHid.filter(r => r.data && new Date(r.data+'T12:00:00').getDate() === d);
-    return rs.length ? rs.reduce((s, r) => s + r.saldoAnt, 0) / 1000 : null;
+    // Usa saldoAtual (saldo final do dia); fallback para saldoAnt se não tiver
+    return rs.length ? rs.reduce((s, r) => s + (r.saldoAtual||r.saldoAnt||0), 0) / 1000 : null;
   });
   const estAniByDay = days.map(d => {
     const rs = estAni.filter(r => r.data && new Date(r.data+'T12:00:00').getDate() === d);
-    return rs.length ? rs.reduce((s, r) => s + r.saldoAnt, 0) / 1000 : null;
+    return rs.length ? rs.reduce((s, r) => s + (r.saldoAtual||r.saldoAnt||0), 0) / 1000 : null;
   });
   const estDatasets = [
     { label:'Hidratado', data:estHidByDay, backgroundColor:color+'cc', borderColor:color, borderWidth:1, borderRadius:3, stack:'est' },
@@ -2742,8 +2743,8 @@ async function gerarPDF() {
       const cRD=days.map(d=>notasMes.filter(r=>r.modal==='Rodoviário'&&new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000||null);
       const cTD=days.map(d=>notasMes.filter(r=>r.modal==='Transferência em Tanque'&&new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000||null);
       const estT=db.estoque.filter(r=>r.terminal===t&&r.data&&r.data.startsWith(curM));
-      const eHD=days.map(d=>{const ds=cy2+'-'+String(cm2).padStart(2,'0')+'-'+String(d).padStart(2,'0');const r=estT.find(e=>e.data===ds&&e.produto==='Hidratado');return r?(r.saldoAtual||0)/1000:null;});
-      const eAD=days.map(d=>{const ds=cy2+'-'+String(cm2).padStart(2,'0')+'-'+String(d).padStart(2,'0');const r=estT.find(e=>e.data===ds&&e.produto==='Anidro');return r?(r.saldoAtual||0)/1000:null;});
+      const eHD=days.map(d=>{const ds=cy2+'-'+String(cm2).padStart(2,'0')+'-'+String(d).padStart(2,'0');const rs=estT.filter(e=>e.data===ds&&e.produto==='Hidratado');return rs.length?rs.reduce((s,r)=>s+(r.saldoAtual||r.saldoAnt||0),0)/1000:null;});
+      const eAD=days.map(d=>{const ds=cy2+'-'+String(cm2).padStart(2,'0')+'-'+String(d).padStart(2,'0');const rs=estT.filter(e=>e.data===ds&&e.produto==='Anidro');return rs.length?rs.reduce((s,r)=>s+(r.saldoAtual||r.saldoAnt||0),0)/1000:null;});
 
       // CHART 1: Descarga Rodoviária
       barChart(M,CY0,CLW,CH1,days,[{label:'Sinop',data:sinD,color:BLUE},{label:'Nova Mutum',data:nmD,color:GOLD}],'DESCARGA RODOVIÁRIA',col);
