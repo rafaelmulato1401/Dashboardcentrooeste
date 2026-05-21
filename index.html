@@ -1178,14 +1178,12 @@ function processNotas(rows) {
     if(produto && nf) db.produtoMap[fNumNota+'_'+nf] = produto;
     // nfClienteMap: chave terminal_nf -> nomeCliente (para tabela de destinos)
     if(nomeClienteRaw && nf) db.nfClienteMap[terminal+'_'+nf] = nomeClienteRaw;
-    // clienteCod: pegar Cód. Cliente (col 16) para Carregamento Usina
+    // clienteCod: Cód. Cliente (col 16) = quem RECEBE a NF (3490=Teciap, 83868=Ultra, 23184=Centro)
     const clienteCodNF = (() => {
-      const v = r[16]; // Cód. Cliente col 16
+      const v = r[clienteNomeIdx-1]; // col 16 = Cód. Cliente (col antes de Nome Cliente)
       return typeof v==='number' ? v : parseFloat(String(v||'0'));
     })();
-    const TERM_CODS = {teciap:3490, ultra:83868, centro:23184};
-    const clienteCodTerminal = TERM_CODS[terminal] || 0;
-    db.notas.push({nf,terminal,filial,modal,rotina,qtde,data,dep:depKey,nomeCliente:nomeClienteRaw,produto,clienteCod:clienteCodTerminal});
+    db.notas.push({nf,terminal,filial,modal,rotina,qtde,data,dep:depKey,nomeCliente:nomeClienteRaw,produto,clienteCod:clienteCodNF});
     added++;
   }
   return {added,skipped};
