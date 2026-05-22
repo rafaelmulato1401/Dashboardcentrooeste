@@ -902,9 +902,33 @@ function triggerEstoqueModal(e) {
   document.getElementById('modalData').value = todayLocal();
   document.getElementById('modalEstoque').classList.add('open');
 }
-function handleFileEstoque(e) {
+async function handleFileEstoque(e) {
   const file = e.target.files[0]; if(!file) return;
   e.target.value = '';
+  // Verificar se é consolidado mesmo se o modal já foi aberto
+  const d = await file.arrayBuffer();
+  const wb = XLSX.read(new Uint8Array(d), {type:'array', cellDates:true});
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:''});
+  const hdr = (rows[0]||[]).map(v=>String(v||'').toLowerCase().trim());
+  const isConsolidado = hdr.includes('date') && hdr.includes('terminal') && hdr.includes('produto') && hdr.includes('saldo_m3');
+  if(isConsolidado) {
+    // Fecha modal se estiver aberto
+    const m = document.getElementById('modalEstoque');
+    if(m) m.classList.remove('open');
+    pendingEstoqueMeta = null;
+    const result = processEstoqueConsolidado(rows);
+    if(result) {
+      setStatus('estoque','info','⏳ Salvando no banco de dados...');
+      await saveDB('estoque');
+      buildMonthFilter();
+      setStatus('estoque','success',`✅ Consolidado: ${result.added} registros adicionados, ${result.skipped} já existentes.`);
+      renderLogs();
+      if(document.getElementById('page-terminals').classList.contains('active')) renderTerminal(currentTerminal);
+    }
+    return;
+  }
+  // Arquivo diário normal
   if(!pendingEstoqueMeta) return;
   processEstoque(file, pendingEstoqueMeta.produto, pendingEstoqueMeta.data);
   pendingEstoqueMeta = null;
@@ -928,7 +952,7 @@ function dzDrop(e,t){
   if(t==='estoque') {
     // Verifica se é arquivo consolidado ANTES de abrir modal
     const readerCheck = new FileReader();
-    readerCheck.onload = (ev) => {
+    readerCheck.onload = async (ev) => {
       try {
         const d = new Uint8Array(ev.target.result);
         const wb = XLSX.read(d, {type:'array', cellDates:true});
@@ -940,7 +964,11 @@ function dzDrop(e,t){
           // Arquivo consolidado: processa direto sem popup
           const result = processEstoqueConsolidado(rows);
           if(result) {
+            // SALVA no Firestore e localStorage
+            setStatus('estoque','info','⏳ Salvando no banco de dados...');
+            await saveDB('estoque');
             setStatus('estoque','success',`✅ Consolidado: ${result.added} registros adicionados, ${result.skipped} já existentes.`);
+            buildMonthFilter();
             renderLogs();
             if(document.getElementById('page-terminals').classList.contains('active')) renderTerminal(currentTerminal);
           }
@@ -1314,7 +1342,7 @@ function processEstoqueConsolidado(rows) {
   const saldoIdx   = hdr.findIndex(h=>h.includes('saldo_m3')||h.includes('saldo m3'));
   if(dateIdx<0||termIdx<0||prodIdx<0||saldoIdx<0) return false; // not consolidated format
 
-  const existingKey = new Set(db.estoque.map(r=>`${r.data}_${r.produto}_${r.terminal}_cons`));
+  const existingKey = new Set(db.estoque.map(r=>`${r.data}_${r.produto}_${r.terminal}_${r.dep||''}_${r.gef||''}`));
   let added=0, skipped=0;
   for(let i=1;i<rows.length;i++){
     const r=rows[i];
