@@ -2750,11 +2750,23 @@ async function gerarPDF() {
       k1.forEach(([lb,vl,sb,ac,vc],i)=>kpi(M+i*(KW+0.7),KY,KW,KH,lb,vl,sb,ac,vc));
 
       // ── KPI ROW 2 (5 cards) ──
-      const KY2=KY+KH+1.5,KW2=(W-2*M)/5-0.6;
+      const KY2=KY+KH+1.5,KW2=(W-2*M)/7-0.6;
+      // Estoque atual = saldo mais recente do mês
+      const estT2=db.estoque.filter(r=>r.terminal===t&&r.data&&r.data.startsWith(curM));
+      const estActFn=(prod)=>{
+        const recs=estT2.filter(r=>r.produto===prod);
+        if(!recs.length) return 0;
+        const latestDate=recs.reduce((mx,r)=>r.data>mx?r.data:mx,'');
+        return recs.filter(r=>r.data===latestDate).reduce((s,r)=>s+(r.saldoAtual||r.saldoAnt||0),0)/1000;
+      };
+      const estAtualHid=estActFn('Hidratado'), estAtualAni=estActFn('Anidro');
+
       const k2=[
         ['Trânsito Caminhões',f(tranVol),'m³ a chegar',col,null],
         ['Estática Hidratado',f(estatHid),'m³ contratado',GOLD,null],
         ['Estática Anidro',f(estatAni),'m³ contratado',GOLD,null],
+        ['Estoque Atual Hid.',estAtualHid>0?f(estAtualHid):'-','m³','#0e6674',null],
+        ['Estoque Atual Ani.',estAtualAni>0?f(estAtualAni):'-','m³','#0e6674',null],
         ['Giro (×Estática)',giro.toFixed(2)+'×','vezes recebida',GOLD,null],
         ['Previsão Custo Mês',tarifa>0?'R$ '+Math.round(custo).toLocaleString('pt-BR'):'-',tarifa>0?f(volRec)+' m³ × R$ '+tarifa.toFixed(2)+'/m³':'Configure tarifa','#92400e',null],
       ];
