@@ -1424,8 +1424,8 @@ function renderTerminal(t) {
   // projetado = acumD1 + media * (diasMes - diaD1)
   const descFiltD1 = descMes.filter(r => new Date(r.data+'T12:00:00').getDate() <= diaD1);
   const acumD1Terminal = descFiltD1.reduce((s,r)=>s+r.pesoDst,0)/1000;
-  const diasD1Set = new Set(descFiltD1.map(r=>new Date(r.data+'T12:00:00').getDate()));
-  const mediaTerminal = diasD1Set.size > 0 ? acumD1Terminal / diasD1Set.size : 0;
+  // Média real: divide por TODOS os dias decorridos até D-1 (inclusive dias sem descarga)
+  const mediaTerminal = diaD1 > 0 ? acumD1Terminal / diaD1 : 0;
   let volProjetado;
   if(!isCurrentMonth || diaD1 <= 0) {
     volProjetado = volRecebido;
@@ -1800,8 +1800,8 @@ function renderFerrovia() {
     return d <= diaD1;
   });
   const acumFerroD1 = ferroNotasD1.reduce((s,r)=>s+r.qtde,0)/1000;
-  const diasComDadosFerro = new Set(ferroNotasD1.filter(r=>r.qtde>0).map(r=>new Date(r.data+'T12:00:00').getDate())).size;
-  const media = diasComDadosFerro > 0 ? acumFerroD1 / diasComDadosFerro : 0;
+  // Média real: divide por TODOS os dias decorridos até D-1 (inclusive dias sem carregamento)
+  const media = diaD1 > 0 ? acumFerroD1 / diaD1 : 0;
 
   // ── VOLUME PROJETADO FERROVIA: acumD1 + média × dias_restantes ──
   const diasRestantesFerro = diasMes - diaD1;
@@ -2728,8 +2728,8 @@ async function gerarPDF() {
       let bk=0;for(let d=1;d<=diaD1&&metaDia>0;d++){const dd=descMes.filter(r=>new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.pesoDst,0)/1000;bk=dd-metaDia+(d===1?0:bk);}
       const dD1=descMes.filter(r=>new Date(r.data+'T12:00:00').getDate()<=diaD1);
       const acD1=dD1.reduce((s,r)=>s+r.pesoDst,0)/1000;
-      const nD1=new Set(dD1.map(r=>new Date(r.data+'T12:00:00').getDate())).size;
-      const med=nD1>0?acD1/nD1:0;
+      // Média real: divide por TODOS os dias decorridos (inclusive sem descarga)
+      const med=diaD1>0?acD1/diaD1:0;
       const proj=diaD1>=diasMes?volRec:acD1+med*(diasMes-diaD1);
       const transit=db.transito.filter(r=>r.terminal===t);
       const tranVol=transit.reduce((s,r)=>s+r.pesoLiq,0)/1000;
@@ -2895,8 +2895,8 @@ async function gerarPDF() {
       const saldo=volC-contrato;
       const fD1=fNotas.filter(r=>new Date(r.data+'T12:00:00').getDate()<=diaD1);
       const acF=fD1.reduce((s,r)=>s+r.qtde,0)/1000;
-      const nF=new Set(fD1.filter(r=>r.qtde>0).map(r=>new Date(r.data+'T12:00:00').getDate())).size;
-      const medF=nF>0?acF/nF:0;
+      // Média real: divide por TODOS os dias decorridos (inclusive sem carregamento)
+      const medF=diaD1>0?acF/diaD1:0;
       const projF=diaD1>=diasMes?volC:acF+medF*(diasMes-diaD1);
       let bkF=0;const mdF=contrato/diasMes;
       for(let d=1;d<=diaD1;d++){const v=fNotas.filter(r=>new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000;bkF=v-mdF+(d===1?0:bkF);}
