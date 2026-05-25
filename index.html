@@ -2185,10 +2185,10 @@ function buildMesRefSelect() {
   const cur = getCurMonth();
   // Preservar seleção atual antes de reconstruir
   const currentSelected = sel.value || cur;
-  // Gera últimos 24 meses + próximos 3
+  // Gera últimos 24 meses + próximos 18 (até ~jun/2027)
   const opts = [];
   const _base = new Date();
-  for(let i = -2; i <= 24; i++) {
+  for(let i = -18; i <= 24; i++) {
     const d = new Date(_base.getFullYear(), _base.getMonth() - i, 1);
     const val = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
     opts.push(val);
