@@ -1810,13 +1810,8 @@ function renderFerrovia() {
 
   const saldoMin   = volCarreg - minimo;
   const metaMinDia = minimo / diasMes;
-  let backlogMinAcum = 0;
-  for(let d = 1; d <= diaLoopFerro; d++) {
-    const carregDia = ferroNotas.filter(r => new Date(r.data+'T12:00:00').getDate()===d)
-      .reduce((s,r)=>s+r.qtde,0)/1000;
-    backlogMinAcum = carregDia - metaMinDia + (d===1 ? 0 : backlogMinAcum);
-  }
-  const backlogMin = backlogMinAcum;
+  const diaLoopFerro = isCurrentMonth ? diaD1 : diasMes;
+  const backlogMin = volCarreg - metaMinDia * diaLoopFerro;
 
   // Custo previsto ferrovia: tarifa mês × vol carregado Teciap+Ultra
   const cfgMesFerro   = (db.configHist[curMonth]||{}).ferro || db.config.ferro || {};
