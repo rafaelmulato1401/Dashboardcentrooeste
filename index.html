@@ -421,36 +421,35 @@
 <div class="page" id="page-takeorpay">
   <div class="section-title">Take or Pay — <span class="gold-accent">Ferrovia</span></div>
   <div class="gold-bar"></div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
-    <div>
-      <div class="card-title" style="margin-bottom:10px">Anual</div>
-      <table class="top-table"><thead><tr><th>Mês</th><th>Faturado</th><th>Mín. Contratual</th><th>Índice</th><th>Contrato</th><th>Índice</th></tr></thead><tbody id="topAnualBody"></tbody></table>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:16px">
-      <div>
-        <div class="card-title" style="margin-bottom:8px">1º Trimestre</div>
-        <table class="top-table"><thead><tr><th>Mês</th><th>Faturado</th><th>Mín. Contratual</th><th>Índice</th><th>Contrato</th><th>Índice</th></tr></thead><tbody id="topQ1Body"></tbody></table>
-      </div>
-      <div>
-        <div class="card-title" style="margin-bottom:8px">2º Trimestre</div>
-        <table class="top-table"><thead><tr><th>Mês</th><th>Faturado</th><th>Mín. Contratual</th><th>Índice</th><th>Contrato</th><th>Índice</th></tr></thead><tbody id="topQ2Body"></tbody></table>
-      </div>
-      <div>
-        <div class="card-title" style="margin-bottom:8px">3º Trimestre</div>
-        <table class="top-table"><thead><tr><th>Mês</th><th>Faturado</th><th>Mín. Contratual</th><th>Índice</th><th>Contrato</th><th>Índice</th></tr></thead><tbody id="topQ3Body"></tbody></table>
-      </div>
-      <div>
-        <div class="card-title" style="margin-bottom:8px">4º Trimestre</div>
-        <table class="top-table"><thead><tr><th>Mês</th><th>Faturado</th><th>Mín. Contratual</th><th>Índice</th><th>Contrato</th><th>Índice</th></tr></thead><tbody id="topQ4Body"></tbody></table>
-      </div>
-    </div>
+  <!-- Tabela Anual (full width) com coluna Observação -->
+  <div style="margin-bottom:24px">
+    <div class="card-title" style="margin-bottom:10px">Anual</div>
+    <table class="top-table">
+      <thead><tr>
+        <th>Mês</th><th>Faturado</th><th>Mín. Contratual</th><th>Índice</th><th>Contrato</th><th>Índice</th>
+        <th style="min-width:200px">Observação</th>
+      </tr></thead>
+      <tbody id="topAnualBody"></tbody>
+    </table>
   </div>
 
-  <!-- Observações por mês -->
-  <div id="topObsSection" style="margin-top:28px">
-    <div class="card-title" style="margin-bottom:14px">📝 Observações Mensais</div>
-    <div id="topObsContainer" style="display:flex;flex-direction:column;gap:10px">
-      <!-- preenchido por renderTakeOrPay -->
+  <!-- 4 Trimestres em grid 2x2 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div>
+      <div class="card-title" style="margin-bottom:8px">1º Trimestre</div>
+      <table class="top-table"><thead><tr><th>Mês</th><th>Faturado</th><th>Mín. Contratual</th><th>Índice</th><th>Contrato</th><th>Índice</th></tr></thead><tbody id="topQ1Body"></tbody></table>
+    </div>
+    <div>
+      <div class="card-title" style="margin-bottom:8px">2º Trimestre</div>
+      <table class="top-table"><thead><tr><th>Mês</th><th>Faturado</th><th>Mín. Contratual</th><th>Índice</th><th>Contrato</th><th>Índice</th></tr></thead><tbody id="topQ2Body"></tbody></table>
+    </div>
+    <div>
+      <div class="card-title" style="margin-bottom:8px">3º Trimestre</div>
+      <table class="top-table"><thead><tr><th>Mês</th><th>Faturado</th><th>Mín. Contratual</th><th>Índice</th><th>Contrato</th><th>Índice</th></tr></thead><tbody id="topQ3Body"></tbody></table>
+    </div>
+    <div>
+      <div class="card-title" style="margin-bottom:8px">4º Trimestre</div>
+      <table class="top-table"><thead><tr><th>Mês</th><th>Faturado</th><th>Mín. Contratual</th><th>Índice</th><th>Contrato</th><th>Índice</th></tr></thead><tbody id="topQ4Body"></tbody></table>
     </div>
   </div>
 </div>
@@ -2117,35 +2116,17 @@ function renderTakeOrPay(){
     if(months.length>1){
       const ti=tMin?Math.round(tf/tMin*100):0,tc=tCon?Math.round(tf/tCon*100):0;
       const pc=ti>=100?'pct-good':ti>=80?'pct-warn':'pct-bad';
-      html+=`<tr class="total"><td>Total</td><td class="faturado-val">${tf?fmt(tf):'-'}</td><td>${fmt(tMin)}</td><td class="${pc}">${tf?ti+'%':'-'}</td><td>${fmt(tCon)}</td><td class="${pc}">${tf?tc+'%':'-'}</td></tr>`;
+      const obsTotalCell=showObs?'<td></td>':'';
+      html+=`<tr class="total"><td>Total</td><td class="faturado-val">${tf?fmt(tf):'-'}</td><td>${fmt(tMin)}</td><td class="${pc}">${tf?ti+'%':'-'}</td><td>${fmt(tCon)}</td><td class="${pc}">${tf?tc+'%':'-'}</td>${obsTotalCell}</tr>`;
     }
     document.getElementById(bodyId).innerHTML=html;
   }
-  buildTopTable([0,1,2,3,4,5,6,7,8,9,10,11],'topAnualBody');
+  buildTopTable([0,1,2,3,4,5,6,7,8,9,10,11],'topAnualBody',true); // true = show obs column
   buildTopTable([0,1,2],'topQ1Body');
   buildTopTable([3,4,5],'topQ2Body');
   buildTopTable([6,7,8],'topQ3Body');
   buildTopTable([9,10,11],'topQ4Body');
 
-  // ── OBSERVAÇÕES POR MÊS ──
-  const obsContainer = document.getElementById('topObsContainer');
-  if(obsContainer) {
-    const obsMonths = Object.entries(db.configHist)
-      .filter(([mk,mv]) => mk.startsWith(String(curYear)) && mv.ferro?.obs)
-      .sort(([a],[b]) => a.localeCompare(b));
-    if(!obsMonths.length) {
-      obsContainer.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">Nenhuma observação registrada. Acesse Configurações → Ferrovia para adicionar.</div>';
-    } else {
-      obsContainer.innerHTML = obsMonths.map(([mk,mv]) => {
-        const [y,mo] = mk.split('-');
-        const lbl = (MONTHS[parseInt(mo)-1]||mo)+' / '+y;
-        return `<div style="background:var(--bg2);border:1px solid var(--border);border-left:4px solid var(--gold);border-radius:8px;padding:14px 18px;margin-bottom:10px">
-          <div style="font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">${lbl}</div>
-          <div style="font-size:13px;color:var(--text);line-height:1.6;white-space:pre-wrap">${mv.ferro.obs}</div>
-        </div>`;
-      }).join('');
-    }
-  }
 }
 
 // ============================================================
@@ -3015,16 +2996,13 @@ async function gerarPDF() {
       const gC=m=>{const mk=cY+'-'+String(m+1).padStart(2,'0');return(db.configHist[mk]||{}).ferro?.contrato||88350;};
       const gM=m=>{const mk=cY+'-'+String(m+1).padStart(2,'0');const c=(db.configHist[mk]||{}).ferro;return c?.minimo||(c?.contrato?Math.round(c.contrato*.95):83933);};
 
-      // Annual table: 120mm wide, 6 columns
-      const AW=120,AX=M;
-      const ACW=[Math.floor(AW*0.18),Math.floor(AW*0.20),Math.floor(AW*0.22),Math.floor(AW*0.13),Math.floor(AW*0.18),Math.floor(AW*0.09)];
-      const ACOLS=[['Mês',ACW[0]],['Faturado',ACW[1],'right'],['Mín.Contratual',ACW[2],'right'],['Índice',ACW[3],'right'],['Contrato',ACW[4],'right'],['Índice',ACW[5],'right']];
-      // Fix: make sure columns sum to AW
-      const aSum=ACW.reduce((s,v)=>s+v,0);
-      if(aSum<AW) ACOLS[ACOLS.length-1][1]+=AW-aSum;
+      // ── ANUAL: full width com coluna de Observação ──
+      const AW=W-2*M;
+      const obsColW=AW-120;
+      const ACOLS=[['Mês',18],['Faturado',24,'right'],['Mín.Contratual',26,'right'],['Índice',14,'right'],['Contrato',24,'right'],['Índice',14,'right'],['Observação',obsColW]];
 
-      tblTitle(AX,18,'ANUAL — '+cY,BLUE);
-      tblHead(AX,20,AW,ACOLS,BLUE);
+      tblTitle(M,17,'ANUAL — '+cY,BLUE);
+      tblHead(M,19,AW,ACOLS,BLUE);
       let totF=0,totMn=0,totCn=0;
       for(let m=0;m<12;m++){
         const fat=mV(m),mn=gM(m),cn=gC(m);
@@ -3032,21 +3010,24 @@ async function gerarPDF() {
         const im=mn?Math.round(fat/mn*100):0,ic=cn?Math.round(fat/cn*100):0;
         const rb=fat?(im>=100?'#f0fdf4':im>=80?'#fffbeb':'#fff1f2'):m%2?BG:null;
         const tc=fat&&im<80?RED:fat&&im>=100?GREEN:TEXT;
-        tblRow(AX,25+m*ROW_H,AW,ACOLS,[MONTHS[m],fat?f(fat):'-',f(mn),fat?im+'%':'-',f(cn),fat?ic+'%':'-'],rb,tc);
+        const mk2=cY+'-'+String(m+1).padStart(2,'0');
+        const obs=(db.configHist[mk2]||{}).ferro?.obs||'';
+        tblRow(M,24+m*ROW_H,AW,ACOLS,[MONTHS[m],fat?f(fat):'-',f(mn),fat?im+'%':'-',f(cn),fat?ic+'%':'-',obs],rb,tc);
       }
       const tIm=totMn?Math.round(totF/totMn*100):0;
-      tblRow(AX,25+12*ROW_H,AW,ACOLS,['Total',f(totF),f(totMn),totF?tIm+'%':'-',f(totCn),totF?Math.round(totF/totCn*100)+'%':'-'],'#dce7f5',BLUE,true);
+      tblRow(M,24+12*ROW_H,AW,ACOLS,['Total',f(totF),f(totMn),totF?tIm+'%':'-',f(totCn),totF?Math.round(totF/totCn*100)+'%':'-',''],'#dce7f5',BLUE,true);
 
-      // Quarterly tables: 2x2 grid to the right
-      const QX=AX+AW+6,QW=(W-M-QX)/2-3;
-      // 4 cols that fit in QW
-      const qcw=[Math.floor(QW*0.23),Math.floor(QW*0.27),Math.floor(QW*0.31),QW-Math.floor(QW*0.23)-Math.floor(QW*0.27)-Math.floor(QW*0.31)];
+      // ── TRIMESTRAIS: 2x2 grid abaixo ──
+      const QY0=24+(13)*ROW_H+10;
+      const QW2=(AW-6)/2;
+      const qcw=[Math.floor(QW2*0.22),Math.floor(QW2*0.26),Math.floor(QW2*0.30),QW2-Math.floor(QW2*0.22)-Math.floor(QW2*0.26)-Math.floor(QW2*0.30)];
       const QCOLS=[['Mês',qcw[0]],['Faturado',qcw[1],'right'],['Mín.Cont.',qcw[2],'right'],['Índice',qcw[3],'right']];
 
       [['1º TRIMESTRE',[0,1,2]],['2º TRIMESTRE',[3,4,5]],['3º TRIMESTRE',[6,7,8]],['4º TRIMESTRE',[9,10,11]]].forEach(([lbl,months],qi)=>{
-        const qx=QX+(qi%2)*(QW+6),qy=18+Math.floor(qi/2)*56;
+        const qx=M+(qi%2)*(QW2+6);
+        const qy=QY0+Math.floor(qi/2)*52;
         tblTitle(qx,qy,lbl,BLUE);
-        tblHead(qx,qy+2,QW,QCOLS,BLUE);
+        tblHead(qx,qy+2,QW2,QCOLS,BLUE);
         let tF2=0,tM2=0;
         months.forEach((m,i)=>{
           const fat=mV(m),mn=gM(m);
@@ -3054,10 +3035,10 @@ async function gerarPDF() {
           const im=mn?Math.round(fat/mn*100):0;
           const rb=fat?(im>=100?'#f0fdf4':im>=80?'#fffbeb':'#fff1f2'):i%2?BG:null;
           const tc=fat&&im<80?RED:fat&&im>=100?GREEN:TEXT;
-          tblRow(qx,qy+7+i*ROW_H,QW,QCOLS,[MONTHS[m],fat?f(fat):'-',f(mn),fat?im+'%':'-'],rb,tc);
+          tblRow(qx,qy+7+i*ROW_H,QW2,QCOLS,[MONTHS[m],fat?f(fat):'-',f(mn),fat?im+'%':'-'],rb,tc);
         });
         const tIm2=tM2?Math.round(tF2/tM2*100):0;
-        tblRow(qx,qy+7+3*ROW_H,QW,QCOLS,['Total',tF2?f(tF2):'-',f(tM2),tF2?tIm2+'%':'-'],'#dce7f5',BLUE,true);
+        tblRow(qx,qy+7+3*ROW_H,QW2,QCOLS,['Total',tF2?f(tF2):'-',f(tM2),tF2?tIm2+'%':'-'],'#dce7f5',BLUE,true);
       });
     }
 
