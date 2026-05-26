@@ -2706,7 +2706,8 @@ async function gerarPDF() {
       const expFerro=notasMes.filter(r=>r.modal==='Ferroviário').reduce((s,r)=>s+r.qtde,0)/1000;
       const expRodo=notasMes.filter(r=>r.modal!=='Ferroviário').reduce((s,r)=>s+r.qtde,0)/1000;
       const saldoTop=volRec-top,metaDia=top>0?top/diasMes:0;
-      const bk=metaDia>0?volRec-metaDia*(isCurrentMonth?diaD1:diasMes):0;
+      const isCurM=(curM===today2.substring(0,7));
+      const bk=metaDia>0?volRec-metaDia*(isCurM?diaD1:diasMes):0;
       const med=diaD1>0?volRec/diaD1:0;
       const proj=diaD1>=diasMes?volRec:volRec+med*(diasMes-diaD1);
       const transit=db.transito.filter(r=>r.terminal===t);
