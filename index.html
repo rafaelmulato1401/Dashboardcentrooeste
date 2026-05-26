@@ -1449,9 +1449,10 @@ function renderTerminal(t) {
   // Dia 1: descarga_dia1 - meta_diaria
   // Dia N: descarga_diaN - meta_diaria + backlog_dia_anterior
   // Backlog terminal: volRecebido - (metaDiaria × diaD1)
-  const metaDiaria = top > 0 ? top / diasMes : 0;
-  const diaLoop    = isCurrentMonth ? diaD1 : diasMes;
-  const backlog    = metaDiaria > 0 ? volRecebido - metaDiaria * diaLoop : 0;
+  const metaDiaria  = top > 0 ? top / diasMes : 0;
+  const temContrato = top > 0;
+  const diaLoop     = isCurrentMonth ? diaD1 : diasMes;
+  const backlog     = temContrato ? volRecebido - metaDiaria * diaLoop : 0;
 
   // ── TRÂNSITO ──
   const transitoVol = transitoAll.reduce((s, r) => s + r.pesoLiq, 0) / 1000;
