@@ -2152,32 +2152,6 @@ function renderTakeOrPay(){
       }).join('');
     }
   }
-
-  // ── OBSERVAÇÕES POR MÊS ──
-  const obsContainer = document.getElementById('topObsContainer');
-  if(obsContainer) {
-    const obsMonths = Object.entries(db.configHist)
-      .filter(([mk, mv]) => mk.startsWith(String(curYear)) && mv.ferro?.obs)
-      .sort(([a],[b]) => a.localeCompare(b));
-
-    if(obsMonths.length === 0) {
-      obsContainer.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:12px 0">Nenhuma observação registrada. Configure em Configurações → Ferrovia.</div>';
-    } else {
-      obsContainer.innerHTML = obsMonths.map(([mk, mv]) => {
-        const [y, mo] = mk.split('-');
-        const mesLabel = (MONTHS[parseInt(mo)-1]||mo) + ' / ' + y;
-        const obs = mv.ferro.obs;
-        return `<div style="background:var(--bg2);border:1px solid var(--border);border-left:4px solid var(--gold);border-radius:8px;padding:14px 16px">
-          <div style="font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">${mesLabel}</div>
-          <div style="font-size:13px;color:var(--text);line-height:1.6;white-space:pre-wrap">${obs}</div>
-        </div>`;
-      }).join('');
-    }
-  }
-  buildTopTable([0,1,2],'topQ1Body');
-  buildTopTable([3,4,5],'topQ2Body');
-  buildTopTable([6,7,8],'topQ3Body');
-  buildTopTable([9,10,11],'topQ4Body');
 }
 
 // ============================================================
