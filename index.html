@@ -2104,14 +2104,17 @@ function renderTakeOrPay(){
   };
   const curM=parseInt(getCurMonth().split('-')[1])-1;
 
-  function buildTopTable(months,bodyId){
+  function buildTopTable(months,bodyId,showObs){
     let html='',tf=0,tMin=0,tCon=0;
     months.forEach(m=>{
       const fat=monthlyVol(m),mn=getMinimoMes(m),cn=getContratoMes(m);
       const im=mn?Math.round(fat/mn*100):0, ic=cn?Math.round(fat/cn*100):0;
       tf+=fat;tMin+=mn;tCon+=cn;
       const pc=im>=100?'pct-good':im>=80?'pct-warn':'pct-bad';
-      html+=`<tr class="${m===curM?'highlight':''}"><td>${MONTHS[m]}</td><td class="faturado-val">${fat?fmt(fat):'-'}</td><td>${fmt(mn)}</td><td class="${pc}">${fat?im+'%':'-'}</td><td>${fmt(cn)}</td><td class="${pc}">${fat?ic+'%':'-'}</td></tr>`;
+      const mk2=curYear+'-'+String(m+1).padStart(2,'0');
+      const obs=(db.configHist[mk2]||{}).ferro?.obs||'';
+      const obsCell=showObs?`<td style="color:var(--text2);font-size:11px;max-width:250px;white-space:pre-wrap">${obs||'—'}</td>`:'';
+      html+=`<tr class="${m===curM?'highlight':''}"><td>${MONTHS[m]}</td><td class="faturado-val">${fat?fmt(fat):'-'}</td><td>${fmt(mn)}</td><td class="${pc}">${fat?im+'%':'-'}</td><td>${fmt(cn)}</td><td class="${pc}">${fat?ic+'%':'-'}</td>${obsCell}</tr>`;
     });
     if(months.length>1){
       const ti=tMin?Math.round(tf/tMin*100):0,tc=tCon?Math.round(tf/tCon*100):0;
