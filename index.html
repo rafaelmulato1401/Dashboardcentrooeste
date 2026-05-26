@@ -1792,15 +1792,12 @@ function renderFerrovia() {
     const d = new Date(r.data+'T12:00:00').getDate();
     return d <= diaD1;
   });
-  const acumFerroD1 = ferroNotasD1.reduce((s,r)=>s+r.qtde,0)/1000;
-  // Média real: divide por TODOS os dias decorridos até D-1 (inclusive dias sem carregamento)
-  const media = diaD1 > 0 ? acumFerroD1 / diaD1 : 0;
-
-  // ── VOLUME PROJETADO FERROVIA: acumD1 + média × dias_restantes ──
+  // Projetado e média usando volCarreg total (inclui hoje)
   const diasRestantesFerro = diasMes - diaD1;
+  const media = (isCurrentMonth && diaD1 > 0) ? volCarreg / diaD1 : 0;
   const projetado = (!isCurrentMonth || diaD1 === 0 || diaD1 >= diasMes)
     ? volCarreg
-    : acumFerroD1 + media * diasRestantesFerro;
+    : volCarreg + media * diasRestantesFerro;
 
   // ── BACKLOG FERROVIA ──
   // Fórmula: (Contrato/diasMes) × diaD1 = Meta até D-1
