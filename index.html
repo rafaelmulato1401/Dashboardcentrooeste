@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<!-- v2.1.0 -->
+<!-- v2.2.0 -->
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
@@ -1424,16 +1424,17 @@ function renderTerminal(t) {
   // media = acumD1 / dias_com_dados_ate_D1
   // projetado = acumD1 + media * (diasMes - diaD1)
   const descFiltD1 = descMes.filter(r => new Date(r.data+'T12:00:00').getDate() <= diaD1);
-  const acumD1Terminal = descFiltD1.reduce((s,r)=>s+r.pesoDst,0)/1000;
-  // Média real: divide por TODOS os dias decorridos até D-1 (inclusive dias sem descarga)
-  const mediaTerminal = diaD1 > 0 ? acumD1Terminal / diaD1 : 0;
+  // ── PROJETADO TERMINAL ──
+  // Usa volRecebido total (incluindo hoje) como base real
+  // media = volRecebido / diaD1 (todos os dias decorridos)
+  const mediaTerminal = (isCurrentMonth && diaD1 > 0) ? volRecebido / diaD1 : 0;
   let volProjetado;
   if(!isCurrentMonth || diaD1 <= 0) {
     volProjetado = volRecebido;
   } else if(diaD1 >= diasMes) {
     volProjetado = volRecebido;
   } else {
-    volProjetado = acumD1Terminal + mediaTerminal * (diasMes - diaD1);
+    volProjetado = volRecebido + mediaTerminal * (diasMes - diaD1);
   }
 
   // ── EXPEDIDOS ──
@@ -1447,20 +1448,10 @@ function renderTerminal(t) {
   // Backlog Recebimento acumulado dia a dia:
   // Dia 1: descarga_dia1 - meta_diaria
   // Dia N: descarga_diaN - meta_diaria + backlog_dia_anterior
+  // Backlog terminal: volRecebido - (metaDiaria × diaD1)
   const metaDiaria = top > 0 ? top / diasMes : 0;
-  let backlog = 0;
-  const temContrato = top > 0;
-  // Backlog: acumulado com corte às 23:59 do dia anterior (D-1)
-  // Loop dias 1 até diaD1 inclusive (hoje - 1)
-  const diaLoop = isCurrentMonth ? diaD1 : diasMes;
-  if(temContrato && diaLoop >= 1) {
-    for(let d = 1; d <= diaLoop; d++) {
-      const descDia = descMes
-        .filter(r => new Date(r.data + 'T12:00:00').getDate() === d)
-        .reduce((s, r) => s + r.pesoDst, 0) / 1000;
-      backlog = descDia - metaDiaria + (d === 1 ? 0 : backlog);
-    }
-  }
+  const diaLoop    = isCurrentMonth ? diaD1 : diasMes;
+  const backlog    = metaDiaria > 0 ? volRecebido - metaDiaria * diaLoop : 0;
 
   // ── TRÂNSITO ──
   const transitoVol = transitoAll.reduce((s, r) => s + r.pesoLiq, 0) / 1000;
@@ -1810,16 +1801,12 @@ function renderFerrovia() {
     ? volCarreg
     : acumFerroD1 + media * diasRestantesFerro;
 
-  // ── BACKLOG FERROVIA: corte D-1 (dados até fim do dia anterior) ──
+  // ── BACKLOG FERROVIA ──
+  // Fórmula: (Contrato/diasMes) × diaD1 = Meta até D-1
+  //          Faturado total - Meta D-1 = Backlog
   const metaDiaria = contrato / diasMes;
-  let backlogFerroAcum = 0;
-  const diaLoopFerro = isCurrentMonth ? diaD1 : diasMes;
-  for(let d = 1; d <= diaLoopFerro; d++) {
-    const carregDia = ferroNotas.filter(r => new Date(r.data+'T12:00:00').getDate()===d)
-      .reduce((s,r)=>s+r.qtde,0)/1000;
-    backlogFerroAcum = carregDia - metaDiaria + (d===1 ? 0 : backlogFerroAcum);
-  }
-  const backlogFerro = backlogFerroAcum;
+  const metaAteD1Ferro = metaDiaria * (isCurrentMonth ? diaD1 : diasMes);
+  const backlogFerro = volCarreg - metaAteD1Ferro;
   const backlogFerroColor = backlogFerro >= 0 ? '#1a6b35' : '#b91c1c';
   const backlogFerroLabel = backlogFerro >= 0 ? 'Acima do previsto' : 'Pendência';
 
@@ -2726,12 +2713,9 @@ async function gerarPDF() {
       const expFerro=notasMes.filter(r=>r.modal==='Ferroviário').reduce((s,r)=>s+r.qtde,0)/1000;
       const expRodo=notasMes.filter(r=>r.modal!=='Ferroviário').reduce((s,r)=>s+r.qtde,0)/1000;
       const saldoTop=volRec-top,metaDia=top>0?top/diasMes:0;
-      let bk=0;for(let d=1;d<=diaD1&&metaDia>0;d++){const dd=descMes.filter(r=>new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.pesoDst,0)/1000;bk=dd-metaDia+(d===1?0:bk);}
-      const dD1=descMes.filter(r=>new Date(r.data+'T12:00:00').getDate()<=diaD1);
-      const acD1=dD1.reduce((s,r)=>s+r.pesoDst,0)/1000;
-      // Média real: divide por TODOS os dias decorridos (inclusive sem descarga)
-      const med=diaD1>0?acD1/diaD1:0;
-      const proj=diaD1>=diasMes?volRec:acD1+med*(diasMes-diaD1);
+      const bk=metaDia>0?volRec-metaDia*(isCurrentMonth?diaD1:diasMes):0;
+      const med=diaD1>0?volRec/diaD1:0;
+      const proj=diaD1>=diasMes?volRec:volRec+med*(diasMes-diaD1);
       const transit=db.transito.filter(r=>r.terminal===t);
       const tranVol=transit.reduce((s,r)=>s+r.pesoLiq,0)/1000;
       const giro=(estatHid+estatAni)>0?volRec/(estatHid+estatAni):0;
@@ -2895,12 +2879,10 @@ async function gerarPDF() {
       const volD=db.descargas.filter(r=>r.terminal&&r.terminal.startsWith('rumo_')&&r.data&&r.data.startsWith(curM)).reduce((s,r)=>s+r.pesoDst,0)/1000;
       const saldo=volC-contrato;
       const fD1=fNotas.filter(r=>new Date(r.data+'T12:00:00').getDate()<=diaD1);
-      const acF=fD1.reduce((s,r)=>s+r.qtde,0)/1000;
-      // Média real: divide por TODOS os dias decorridos (inclusive sem carregamento)
-      const medF=diaD1>0?acF/diaD1:0;
-      const projF=diaD1>=diasMes?volC:acF+medF*(diasMes-diaD1);
-      let bkF=0;const mdF=contrato/diasMes;
-      for(let d=1;d<=diaD1;d++){const v=fNotas.filter(r=>new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000;bkF=v-mdF+(d===1?0:bkF);}
+      const medF=diaD1>0?volC/diaD1:0;
+      const projF=diaD1>=diasMes?volC:volC+medF*(diasMes-diaD1);
+      const mdF=contrato/diasMes;
+      const bkF=volC-(mdF*diaD1);
       const saldoMin=volC-minimo,custoF=tarifaF*volC;
 
       // KPIs (10 cards, 2 rows)
