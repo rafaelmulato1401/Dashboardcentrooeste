@@ -447,19 +447,9 @@
   </div>
 
   <!-- Observações por mês -->
-  <div id="topObsSection" style="margin-top:24px">
-    <div class="card-title" style="margin-bottom:12px">📝 Observações Mensais</div>
-    <div id="topObsContainer" style="display:flex;flex-direction:column;gap:10px">
-      <!-- Preenchido por renderTakeOrPay -->
-    </div>
-  </div>
-
-  <!-- Observações por mês -->
   <div id="topObsSection" style="margin-top:28px">
-    <div class="card-title" style="margin-bottom:14px;display:flex;align-items:center;gap:8px">
-      📝 <span>Observações Mensais</span>
-    </div>
-    <div id="topObsContainer">
+    <div class="card-title" style="margin-bottom:14px">📝 Observações Mensais</div>
+    <div id="topObsContainer" style="display:flex;flex-direction:column;gap:10px">
       <!-- preenchido por renderTakeOrPay -->
     </div>
   </div>
@@ -2132,6 +2122,10 @@ function renderTakeOrPay(){
     document.getElementById(bodyId).innerHTML=html;
   }
   buildTopTable([0,1,2,3,4,5,6,7,8,9,10,11],'topAnualBody');
+  buildTopTable([0,1,2],'topQ1Body');
+  buildTopTable([3,4,5],'topQ2Body');
+  buildTopTable([6,7,8],'topQ3Body');
+  buildTopTable([9,10,11],'topQ4Body');
 
   // ── OBSERVAÇÕES POR MÊS ──
   const obsContainer = document.getElementById('topObsContainer');
