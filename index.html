@@ -1229,7 +1229,8 @@ function processNotas(rows) {
      const nomeClienteRaw=String(r[clienteNomeIdx]||'').trim();
      const nomeCliente=nomeClienteRaw.toUpperCase();
     const rotina=String(r[rotIdx]||'').trim();
-    const modal=classifyModal(transp,placa,nomeCliente,terminal);
+    // isUsina=false: NFs in processNotas are ALWAYS from terminal's own depot
+    const modal=classifyModal(transp,placa,nomeCliente,terminal,false);
     const gef=String(r[gefIdx]||'');
     const fPart=gef.split('-').map(s=>s.trim());
     const fNum=parseInt(fPart[2])||1;
@@ -1381,15 +1382,16 @@ function processEstoqueConsolidado(rows) {
 // ============================================================
 // MODAL CLASSIFICATION
 // ============================================================
-function classifyModal(transp, placa, nomeCliente, terminal) {
+function classifyModal(transp, placa, nomeCliente, terminal, isUsina) {
+  // isUsina=true: NF saindo da USINA para o terminal → sempre Rodoviário (nunca Transferência)
   if(!transp||transp==='NAN'||transp==='') return 'Outros';
   if(transp.includes('RUMO MALHA')) return 'Ferroviário';
   const cleanPlaca=placa.replace(/\s/g,'');
   if(/^[A-Z]{3}\d{7}/i.test(cleanPlaca)) return 'Ferroviário';
-  const tNames={teciap:['TECIAP'],ultra:['ULTRACARGO'],centro:['CENTROESTE']};
-  const names=tNames[terminal]||[];
-  if(names.some(n=>transp.includes(n))) return 'Transferência em Tanque';
-  if(nomeCliente && transp===nomeCliente) return 'Transferência em Tanque';
+  // Transferência em Tanque: quando o DESTINO é outro terminal INPASA
+  // (não quando o transportador tem o nome do terminal - pode ser entrega normal)
+  const terminalNames=['TECIAP','ULTRACARGO','CENTROESTE'];
+  if(nomeCliente && terminalNames.some(n=>nomeCliente.includes(n))) return 'Transferência em Tanque';
   return 'Rodoviário';
 }
 
