@@ -535,6 +535,7 @@
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
     <p style="font-size:12px;color:var(--text2)">Apenas registros novos são adicionados — duplicatas são ignoradas automaticamente.</p>
     <button class="btn-clear-all" onclick="clearAllData()">🗑️ Limpar Todos os Dados</button>
+    <button class="btn-clear-all" onclick="patchNotasModal()" style="background:#1a3a6b;margin-left:10px" title="Corrige NFs 361618 e 184628 de Transferência → Rodoviário">🔧 Corrigir Modais (NFs 361618 / 184628)</button>
   </div>
   <div class="upload-grid">
     <!-- 1. NOTAS FISCAIS (deve ser importado PRIMEIRO) -->
@@ -2382,7 +2383,31 @@ async function clearData(type) {
   if(document.getElementById('page-terminals').classList.contains('active')) renderTerminal(currentTerminal);
 }
 
-async function clearAllData() {
+async // ── PATCH: corrige modal de NFs específicas sem reimportar ──
+function patchNotasModal() {
+  const fixes = [
+    {nf:'361618', modal:'Rodoviário'},
+    {nf:'184628', modal:'Rodoviário'},
+  ];
+  let fixed = 0;
+  fixes.forEach(({nf, modal}) => {
+    const rec = db.notas.find(r => r.nf === nf);
+    if(rec && rec.modal !== modal) {
+      rec.modal = modal;
+      fixed++;
+    }
+  });
+  if(fixed > 0) {
+    saveDB('notas').then(() => {
+      alert(`✅ ${fixed} nota(s) corrigida(s) e salvas no banco.\nRecarregue a página para ver os dados atualizados.`);
+      renderTerminal(currentTerminal);
+    });
+  } else {
+    alert('Nenhuma nota encontrada para corrigir (já estão corretas ou não existem).');
+  }
+}
+
+function clearAllData() {
   if(!confirm('⚠️ Tem certeza que deseja apagar TODOS os dados lançados?\nDescargas, Trânsito, Notas e Estoque serão removidos.\nEsta ação não pode ser desfeita.')) return;
 
   // Mostra progresso
