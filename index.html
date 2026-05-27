@@ -2383,7 +2383,7 @@ async function clearData(type) {
   if(document.getElementById('page-terminals').classList.contains('active')) renderTerminal(currentTerminal);
 }
 
-async // ── PATCH: corrige modal de NFs específicas sem reimportar ──
+// ── PATCH: corrige modal de NFs específicas sem reimportar ──
 function patchNotasModal() {
   const targetNFs = ['361618','184628'];
   // Busca com flexibilidade: string, número, e trim
