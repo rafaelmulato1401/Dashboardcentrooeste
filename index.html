@@ -2385,25 +2385,39 @@ async function clearData(type) {
 
 async // ── PATCH: corrige modal de NFs específicas sem reimportar ──
 function patchNotasModal() {
-  const fixes = [
-    {nf:'361618', modal:'Rodoviário'},
-    {nf:'184628', modal:'Rodoviário'},
-  ];
-  let fixed = 0;
-  fixes.forEach(({nf, modal}) => {
-    const rec = db.notas.find(r => r.nf === nf);
-    if(rec && rec.modal !== modal) {
-      rec.modal = modal;
+  const targetNFs = ['361618','184628'];
+  // Busca com flexibilidade: string, número, e trim
+  const findNF = (nf) => db.notas.find(r =>
+    String(r.nf||'').trim() === nf ||
+    String(r.nf||'').trim() === String(parseInt(nf))
+  );
+  // Também mostra o que existe para debug
+  const ultraNotas = db.notas.filter(r=>r.terminal==='ultra'&&r.modal==='Transferência em Tanque');
+  console.log('Notas Ultra com Transferência:', ultraNotas.map(r=>({nf:r.nf,modal:r.modal,qtde:r.qtde,data:r.data})));
+
+  let fixed = 0, log = [];
+  targetNFs.forEach(nf => {
+    const rec = findNF(nf);
+    if(rec) {
+      log.push(`NF ${nf}: modal=${rec.modal} → Rodoviário`);
+      rec.modal = 'Rodoviário';
       fixed++;
+    } else {
+      log.push(`NF ${nf}: NÃO ENCONTRADA em db.notas`);
     }
   });
+
+  console.log('Patch result:', log);
   if(fixed > 0) {
     saveDB('notas').then(() => {
-      alert(`✅ ${fixed} nota(s) corrigida(s) e salvas no banco.\nRecarregue a página para ver os dados atualizados.`);
+      alert('✅ Corrigido:\n' + log.join('\n') + '\n\nSalvo no banco. Recarregue a página.');
       renderTerminal(currentTerminal);
     });
   } else {
-    alert('Nenhuma nota encontrada para corrigir (já estão corretas ou não existem).');
+    // Se não achou, mostra o que tem de Transferência em Ultra para debug
+    const msg = log.join('\n') + '\n\nTransferências encontradas em Ultra:\n' +
+      ultraNotas.slice(0,5).map(r=>`NF:${r.nf} modal:${r.modal} qtde:${(r.qtde/1000).toFixed(1)}m³`).join('\n');
+    alert(msg);
   }
 }
 
