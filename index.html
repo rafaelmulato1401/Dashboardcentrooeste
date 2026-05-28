@@ -514,6 +514,20 @@
       <button class="btn-save" onclick="saveConfig('ferro')">Salvar Ferrovia</button>
     </div>
 
+    <!-- CORRIGIR MODAIS GRAVADOS -->
+    <div class="config-card" style="grid-column:1/-1;border:2px solid var(--gold)">
+      <div class="config-card-title">🔧 Correção de Modais — Notas Fiscais</div>
+      <p style="color:var(--text-muted);font-size:13px;margin:0 0 12px">
+        Reclassifica registros gravados no Firebase que possam estar com modal incorreto
+        (ex: NFs de Perda/Sobra classificadas como Transferência em Tanque).
+        Use apenas uma vez após atualizar o sistema.
+      </p>
+      <button class="btn btn-primary" onclick="fixNotasModal()" id="btnFixModal">
+        🔄 Corrigir modais gravados
+      </button>
+      <span id="fixModalStatus" style="margin-left:12px;font-size:13px"></span>
+    </div>
+
     <!-- HISTÓRICO DE CONFIGURAÇÕES -->
     <div class="config-card" style="grid-column:1/-1">
       <div class="config-card-title">📋 Histórico de Configurações por Mês</div>
@@ -1234,6 +1248,8 @@ function processNotas(rows) {
     const gef=String(r[gefIdx]||'');
     const fPart=gef.split('-').map(s=>s.trim());
     const fNum=parseInt(fPart[2])||1;
+    // Considerar apenas filiais 1 (Sinop) e 3 (Nova Mutum) — ignorar depósitos de outras filiais
+    if(fNum!==1 && fNum!==3) { skipped++; continue; }
     const filial=FILIAL_MAP[fNum]||'Sinop';
      const qtdeRaw=r[qtdeIdx];
     const qtde=typeof qtdeRaw==='number'?qtdeRaw:(parseFloat(String(qtdeRaw||'0').replace(/\./g,'').replace(',','.'))||0);
