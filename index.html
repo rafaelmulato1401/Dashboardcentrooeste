@@ -1230,7 +1230,7 @@ function processNotas(rows) {
      const nomeCliente=nomeClienteRaw.toUpperCase();
     const rotina=String(r[rotIdx]||'').trim();
     // isUsina=false: NFs in processNotas are ALWAYS from terminal's own depot
-    const modal=classifyModal(transp,placa,nomeCliente,terminal,false);
+    const modal=classifyModal(transp,placa,nomeCliente,terminal,false,rotina);
     const gef=String(r[gefIdx]||'');
     const fPart=gef.split('-').map(s=>s.trim());
     const fNum=parseInt(fPart[2])||1;
@@ -1382,16 +1382,20 @@ function processEstoqueConsolidado(rows) {
 // ============================================================
 // MODAL CLASSIFICATION
 // ============================================================
-function classifyModal(transp, placa, nomeCliente, terminal, isUsina) {
+function classifyModal(transp, placa, nomeCliente, terminal, isUsina, rotina) {
   // isUsina=true: NF saindo da USINA para o terminal → sempre Rodoviário (nunca Transferência)
   if(!transp||transp==='NAN'||transp==='') return 'Outros';
   if(transp.includes('RUMO MALHA')) return 'Ferroviário';
   const cleanPlaca=placa.replace(/\s/g,'');
   if(/^[A-Z]{3}\d{7}/i.test(cleanPlaca)) return 'Ferroviário';
-  // Transferência em Tanque: quando o DESTINO é outro terminal INPASA
-  // (não quando o transportador tem o nome do terminal - pode ser entrega normal)
-  const terminalNames=['TECIAP','ULTRACARGO','CENTROESTE'];
-  if(nomeCliente && terminalNames.some(n=>nomeCliente.includes(n))) return 'Transferência em Tanque';
+  // NFs de Perda/Sobra nunca são Transferência (são ajustes internos de estoque)
+  const rotinaUp = (rotina||'').toUpperCase();
+  if(rotinaUp.includes('PERDA') || rotinaUp.includes('SOBRA') || rotinaUp.includes('LANÇAMENTO')) return 'Rodoviário';
+  // Transferência em Tanque: só classifica quando NF SAI DO TERMINAL (não da usina)
+  if(!isUsina) {
+    const terminalNames=['TECIAP','ULTRACARGO','CENTROESTE'];
+    if(nomeCliente && terminalNames.some(n=>nomeCliente.includes(n))) return 'Transferência em Tanque';
+  }
   return 'Rodoviário';
 }
 
