@@ -1532,7 +1532,7 @@ function renderTerminal(t) {
     <div class="kpi" style="--kpi-color:#f0a500"><div class="kpi-label">Take or Pay / Mês</div><div class="kpi-value">${fmt(top)}</div><div class="kpi-sub">m³ contratado</div></div>
     <div class="kpi" style="--kpi-color:${semDadosTerminal?'#9aa3bb':saldoTop<0?'#b91c1c':'#1a6b35'}"><div class="kpi-label">Saldo Take or Pay</div><div class="kpi-value ${semDadosTerminal?'':saldoTop<0?'negative':''}">${semDadosTerminal?'—':fmt(saldoTop)}</div><div class="kpi-sub">m³</div></div>
     <div class="kpi" style="--kpi-color:${temContrato?backlogColor:'#9aa3bb'}"><div class="kpi-label">Backlog Recebimento</div><div class="kpi-value ${backlogClass}">${temContrato?(semDadosTerminal?'—':backlogValue):'—'}</div><div class="kpi-sub">${temContrato?backlogLabel:'Contrato não configurado'}</div></div>
-    <div class="kpi" style="--kpi-color:#1a6b35"><div class="kpi-label">Volume Projetado</div><div class="kpi-value">${semDadosTerminal?'—':fmt(volProjetado)}</div><div class="kpi-sub">m³ estimado mês</div></div>
+    <div class="kpi" style="--kpi-color:#1a6b35"><div class="kpi-label">Recebimento Projetado Caminhões</div><div class="kpi-value">${semDadosTerminal?'—':fmt(volProjetado)}</div><div class="kpi-sub">m³ estimado mês</div></div>
     <div class="kpi" style="--kpi-color:${color}"><div class="kpi-label">Trânsito Caminhões</div><div class="kpi-value">${fmt(transitoVol)}</div><div class="kpi-sub">m³ a chegar</div></div>
     <div class="kpi" style="--kpi-color:#9aa3bb"><div class="kpi-label">Estática Hidratado</div><div class="kpi-value">${fmt(estatHid)}</div><div class="kpi-sub">m³ contratado</div></div>
     <div class="kpi" style="--kpi-color:#9aa3bb"><div class="kpi-label">Estática Anidro</div><div class="kpi-value">${fmt(estatAni)}</div><div class="kpi-sub">m³ contratado</div></div>
@@ -2806,7 +2806,7 @@ async function gerarPDF() {
         ['Take or Pay / Mês',f(top),'m³ contratado',col,null],
         ['Saldo Take or Pay',f(Math.abs(saldoTop)),'m³',saldoTop>=0?GREEN:RED,saldoTop>=0?GREEN:RED],
         ['Backlog Recebimento',f(Math.abs(bk)),bk>=0?'Acima do previsto':'Pendência',bk>=0?GREEN:RED,bk>=0?GREEN:RED],
-        ['Vol. Projetado',f(proj),'m³ estimado mês','#5b21b6',null],
+        ['Recebimento Projetado Caminhões',f(proj),'m³ estimado mês','#5b21b6',null],
       ];
       k1.forEach(([lb,vl,sb,ac,vc],i)=>kpi(M+i*(KW+0.7),KY,KW,KH,lb,vl,sb,ac,vc));
 
