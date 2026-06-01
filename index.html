@@ -1337,6 +1337,8 @@ function processEstoque(file, produto, data) {
         const terminal=depMap[dep];
         if(!terminal) continue;
         const filialGef=String(r[3]||'').trim(); // Grupo/Empresa/Filial = col 3
+        // dep 0.35 só é Ultra Rondon nas filiais 1/1/1 e 1/1/3; demais (ex: 1/1/6 = Aratu) ignorar
+        if(dep==='0.35' && terminal==='ultra' && filialGef!=='1 / 1 / 1' && filialGef!=='1 / 1 / 3') continue;
         const key=`${data}_${produto}_${terminal}_${dep}_${filialGef}`;
         if(existingKey.has(key)){skipped++;continue;}
         existingKey.add(key);
