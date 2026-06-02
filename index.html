@@ -1449,7 +1449,11 @@ function renderTerminal(t) {
 
 
   // Notas: carregamentos saindo dos depósitos do terminal
-  const notas    = db.notas.filter(r => r.terminal === t);
+  // Para Ultra: filtrar apenas deps Rondon corretos — dep 0.35 filial 1 ou dep 0.34 filial 3
+  // Isso garante compatibilidade tanto com dados novos quanto com Firebase antigo
+  const ultraDepsOk = r => (r.dep==='0.35' && (!r.gef||r.gef.endsWith('1')))
+                         || (r.dep==='0.34' && (!r.gef||r.gef.endsWith('3')));
+  const notas    = db.notas.filter(r => r.terminal === t && (t !== 'ultra' || ultraDepsOk(r)));
   const notasMes = notas.filter(r => r.data && r.data.startsWith(curMonth));
 
   // Trânsito
@@ -1586,7 +1590,8 @@ function renderTerminal(t) {
 
   // ── GRÁFICO 2: CARREGAMENTOS ──
   const notasByDay = days.map(d => {
-    const ns = notasMes.filter(r => r.data && new Date(r.data+'T12:00:00').getDate() === d);
+    const ns = notasMes.filter(r => r.data && new Date(r.data+'T12:00:00').getDate() === d
+      && (t !== 'ultra' || r.modal === 'Ferroviário'));
     return ns.reduce((s, r) => s + r.qtde, 0) / 1000 || null;
   });
   document.getElementById('chartCarregLabel').textContent = t === 'ultra' ? 'Ferro' : 'Rodo / Ferro / Transf';
