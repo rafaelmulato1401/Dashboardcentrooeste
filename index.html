@@ -572,8 +572,9 @@
     <div class="upload-card">
       <div class="upload-card-title" style="color:var(--blue)">② 📦 Descargas</div>
       <div class="upload-card-desc">⚠️ <strong>Importe após as Notas.</strong> Planilha de movimentação de descargas. Apenas registros com Peso Destino preenchido e sem mesclagem são considerados.</div>
-      <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
-        <button class="btn-clear-data" onclick="clearData('descargas')">🗑️ Limpar Descargas</button>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px">
+        <button class="btn-clear-data" onclick="clearDescargasMes()">🗑️ Limpar por Mês/Terminal</button>
+        <button class="btn-clear-data" onclick="clearData('descargas')">🗑️ Limpar Todas as Descargas</button>
       </div>
       <div class="drop-zone" id="dz-descargas"
            ondragover="dzDrag(event,'descargas')" ondragleave="dzLeave('descargas')" ondrop="dzDrop(event,'descargas')">
@@ -2391,6 +2392,84 @@ async function deleteFromFirestore(keys) {
   } catch(e) {
     console.warn('Erro ao apagar do Firestore:', e.message);
   }
+}
+
+// ── LIMPAR DESCARGAS POR MÊS E TERMINAL ──
+async function clearDescargasMes() {
+  const mesesSet = new Set(db.descargas.map(r => r.data ? r.data.substring(0,7) : '').filter(Boolean));
+  const meses = Array.from(mesesSet).sort();
+  if(meses.length === 0) { alert('Não há descargas cadastradas.'); return; }
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center';
+
+  const box = document.createElement('div');
+  box.style.cssText = 'background:var(--blue-dark);border:1px solid var(--border);border-radius:12px;padding:28px;min-width:340px;max-width:420px;width:90%';
+  box.innerHTML = `
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:800;color:#fff;margin-bottom:18px;letter-spacing:.5px">
+      🗑️ Limpar Descargas por Mês
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Mês</label>
+      <select id="clearDescMesSelect" style="width:100%;padding:8px 10px;background:var(--blue-mid);border:1px solid var(--border);border-radius:6px;color:#fff;font-size:13px">
+        ${meses.map(m => {
+          const [y,mo] = m.split('-');
+          const nome = new Date(y, mo-1, 1).toLocaleString('pt-BR',{month:'long',year:'numeric'});
+          return `<option value="${m}">${nome.charAt(0).toUpperCase()+nome.slice(1)}</option>`;
+        }).join('')}
+      </select>
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Terminal</label>
+      <select id="clearDescTerminalSelect" style="width:100%;padding:8px 10px;background:var(--blue-mid);border:1px solid var(--border);border-radius:6px;color:#fff;font-size:13px">
+        <option value="all">Todos os terminais</option>
+        <option value="teciap">Teciap</option>
+        <option value="ultra">Ultracargo RO</option>
+        <option value="centro">Centroeste</option>
+      </select>
+    </div>
+    <div id="clearDescPreview" style="font-size:12px;color:var(--text2);margin-bottom:16px;min-height:20px"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button id="clearDescCancel" style="padding:8px 18px;border:1px solid var(--border);border-radius:6px;background:transparent;color:#fff;cursor:pointer;font-size:12px;font-weight:700">Cancelar</button>
+      <button id="clearDescConfirm" style="padding:8px 18px;background:#b91c1c;border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:12px;font-weight:700">🗑️ Confirmar Limpeza</button>
+    </div>
+  `;
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  const updatePreview = () => {
+    const mes = document.getElementById('clearDescMesSelect').value;
+    const term = document.getElementById('clearDescTerminalSelect').value;
+    const count = db.descargas.filter(r => r.data && r.data.startsWith(mes) && (term === 'all' || r.terminal === term)).length;
+    document.getElementById('clearDescPreview').textContent = `${count} descarga(s) serão removidas.`;
+  };
+  document.getElementById('clearDescMesSelect').addEventListener('change', updatePreview);
+  document.getElementById('clearDescTerminalSelect').addEventListener('change', updatePreview);
+  updatePreview();
+
+  document.getElementById('clearDescCancel').onclick = () => document.body.removeChild(overlay);
+  overlay.onclick = e => { if(e.target===overlay) document.body.removeChild(overlay); };
+
+  document.getElementById('clearDescConfirm').onclick = async () => {
+    const mes = document.getElementById('clearDescMesSelect').value;
+    const term = document.getElementById('clearDescTerminalSelect').value;
+    const termLabel = term === 'all' ? 'todos os terminais' : term;
+    const [y, mo] = mes.split('-');
+    const nomeMes = new Date(y, mo-1, 1).toLocaleString('pt-BR',{month:'long',year:'numeric'});
+
+    document.body.removeChild(overlay);
+
+    const antes = db.descargas.length;
+    db.descargas = db.descargas.filter(r => !(r.data && r.data.startsWith(mes) && (term === 'all' || r.terminal === term)));
+    const removidas = antes - db.descargas.length;
+
+    setStatus('descargas','info',`⏳ Salvando (removidas ${removidas} descargas)...`);
+    await saveDB('descargas');
+    buildMonthFilter();
+    renderLogs();
+    setStatus('descargas','success',`✅ ${removidas} descarga(s) de ${nomeMes} / ${termLabel} removidas com sucesso.`);
+    if(document.getElementById('page-terminals').classList.contains('active')) renderTerminal(currentTerminal);
+  };
 }
 
 // ── LIMPAR NOTAS POR MÊS E TERMINAL ──
