@@ -1224,17 +1224,18 @@ function processNotas(rows) {
   const rotIdx=cols['Nome Rotina'], transpIdx=cols['Razão Transportadora'];
   const placaIdx=cols['Placas'], clienteNomeIdx=cols['Nome Cliente'];
   const depIdx=cols['Cód. Depósito'], qtdeIdx=cols['Qtde'];
-  // FIX: mapa de depósito aceita tanto float quanto string formatada
-  const depMap={'17':'teciap','0.21':'centro','0.07':'centro','1':'ultra','3':'ultra'};
+  const depSaidaIdx=cols['Depósito Saída']; // nome do depósito — identificação correta
+  // Mapeamento pelo nome Depósito Saída — evita tanques internos (dep 01, 03, etc)
+  const depSaidaMap={'TECIAP':'teciap','ULTRACARGO RONDON':'ultra','CENTROESTE':'centro'};
   let added=0,skipped=0;
   const existing=new Set(db.notas.map(r=>r.nf));
   for(let i=dataStartRow;i<rows.length;i++){
     const r=rows[i];
-    const depRaw=r[depIdx];
-    const dep=parseFloat(String(depRaw||'0').replace(',','.'));
-    const depKey=String(dep);
-    const terminal=depMap[depKey];
+    const depSaida=String(r[depSaidaIdx]||'').trim().toUpperCase();
+    const terminal=depSaidaMap[depSaida];
     if(!terminal) continue;
+    const depRaw=r[depIdx];
+    const depKey=String(parseFloat(String(depRaw||'0').replace(',','.')));
     const nf=String(r[nfIdx]||'').trim();
     if(!nf||existing.has(nf)){if(nf)skipped++;continue;}
     existing.add(nf);
