@@ -1484,7 +1484,7 @@ function renderTerminal(t) {
   // ── EXPEDIDOS ──
   const expFerro = notasMes.filter(r => r.modal === 'Ferroviário').reduce((s, r) => s + r.qtde, 0) / 1000;
   // Ultra não tem operação Rodo/Transf — sempre zero
-  const expRodo  = terminal === 'ultra' ? 0 : notasMes.filter(r => r.modal === 'Rodoviário' || r.modal === 'Transferência em Tanque').reduce((s, r) => s + r.qtde, 0) / 1000;
+  const expRodo  = t === 'ultra' ? 0 : notasMes.filter(r => r.modal === 'Rodoviário' || r.modal === 'Transferência em Tanque').reduce((s, r) => s + r.qtde, 0) / 1000;
 
   // ── TAKE OR PAY / BACKLOG ──
   const top      = cfg.top || 0;
