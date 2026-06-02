@@ -555,8 +555,9 @@
     <div class="upload-card">
       <div class="upload-card-title" style="color:var(--centro)">① 🧾 Notas Fiscais</div>
       <div class="upload-card-desc">⚠️ <strong>Importe primeiro.</strong> Gera o mapeamento Produto × NF usado pelas Descargas. Classifica automaticamente: Ferroviário, Rodoviário e Transferência em Tanque.</div>
-      <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
-        <button class="btn-clear-data" onclick="clearData('notas')">🗑️ Limpar Notas Fiscais</button>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px">
+        <button class="btn-clear-data" onclick="clearNotasMes()">🗑️ Limpar por Mês/Terminal</button>
+        <button class="btn-clear-data" onclick="clearData('notas')">🗑️ Limpar Todas as Notas</button>
       </div>
       <div class="drop-zone" id="dz-notas"
            ondragover="dzDrag(event,'notas')" ondragleave="dzLeave('notas')" ondrop="dzDrop(event,'notas')">
@@ -2390,6 +2391,89 @@ async function deleteFromFirestore(keys) {
   } catch(e) {
     console.warn('Erro ao apagar do Firestore:', e.message);
   }
+}
+
+// ── LIMPAR NOTAS POR MÊS E TERMINAL ──
+async function clearNotasMes() {
+  // Montar lista de meses disponíveis
+  const mesesSet = new Set(db.notas.map(r => r.data ? r.data.substring(0,7) : '').filter(Boolean));
+  const meses = Array.from(mesesSet).sort();
+  if(meses.length === 0) { alert('Não há notas cadastradas.'); return; }
+
+  // Modal HTML
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center';
+
+  const box = document.createElement('div');
+  box.style.cssText = 'background:var(--blue-dark);border:1px solid var(--border);border-radius:12px;padding:28px;min-width:340px;max-width:420px;width:90%';
+  box.innerHTML = `
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:800;color:#fff;margin-bottom:18px;letter-spacing:.5px">
+      🗑️ Limpar Notas por Mês
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Mês</label>
+      <select id="clearMesSelect" style="width:100%;padding:8px 10px;background:var(--blue-mid);border:1px solid var(--border);border-radius:6px;color:#fff;font-size:13px">
+        ${meses.map(m => {
+          const [y,mo] = m.split('-');
+          const nome = new Date(y, mo-1, 1).toLocaleString('pt-BR',{month:'long',year:'numeric'});
+          return `<option value="${m}">${nome.charAt(0).toUpperCase()+nome.slice(1)}</option>`;
+        }).join('')}
+      </select>
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Terminal</label>
+      <select id="clearTerminalSelect" style="width:100%;padding:8px 10px;background:var(--blue-mid);border:1px solid var(--border);border-radius:6px;color:#fff;font-size:13px">
+        <option value="all">Todos os terminais</option>
+        <option value="teciap">Teciap</option>
+        <option value="ultra">Ultracargo RO</option>
+        <option value="centro">Centroeste</option>
+      </select>
+    </div>
+    <div id="clearMesPreview" style="font-size:12px;color:var(--text2);margin-bottom:16px;min-height:20px"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button id="clearMesCancel" style="padding:8px 18px;border:1px solid var(--border);border-radius:6px;background:transparent;color:#fff;cursor:pointer;font-size:12px;font-weight:700">Cancelar</button>
+      <button id="clearMesConfirm" style="padding:8px 18px;background:#b91c1c;border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:12px;font-weight:700">🗑️ Confirmar Limpeza</button>
+    </div>
+  `;
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  // Preview ao mudar seleção
+  const updatePreview = () => {
+    const mes = document.getElementById('clearMesSelect').value;
+    const term = document.getElementById('clearTerminalSelect').value;
+    const count = db.notas.filter(r => r.data && r.data.startsWith(mes) && (term === 'all' || r.terminal === term)).length;
+    document.getElementById('clearMesPreview').textContent = `${count} nota(s) serão removidas.`;
+  };
+  document.getElementById('clearMesSelect').addEventListener('change', updatePreview);
+  document.getElementById('clearTerminalSelect').addEventListener('change', updatePreview);
+  updatePreview();
+
+  // Cancelar
+  document.getElementById('clearMesCancel').onclick = () => document.body.removeChild(overlay);
+  overlay.onclick = e => { if(e.target===overlay) document.body.removeChild(overlay); };
+
+  // Confirmar
+  document.getElementById('clearMesConfirm').onclick = async () => {
+    const mes = document.getElementById('clearMesSelect').value;
+    const term = document.getElementById('clearTerminalSelect').value;
+    const termLabel = term === 'all' ? 'todos os terminais' : term;
+    const [y, mo] = mes.split('-');
+    const nomeMes = new Date(y, mo-1, 1).toLocaleString('pt-BR',{month:'long',year:'numeric'});
+
+    document.body.removeChild(overlay);
+
+    const antes = db.notas.length;
+    db.notas = db.notas.filter(r => !(r.data && r.data.startsWith(mes) && (term === 'all' || r.terminal === term)));
+    const removidas = antes - db.notas.length;
+
+    setStatus('notas','info',`⏳ Salvando (removidas ${removidas} notas)...`);
+    await saveDB('notas');
+    buildMonthFilter();
+    renderLogs();
+    setStatus('notas','success',`✅ ${removidas} notas de ${nomeMes} / ${termLabel} removidas com sucesso.`);
+    if(document.getElementById('page-terminals').classList.contains('active')) renderTerminal(currentTerminal);
+  };
 }
 
 async function clearData(type) {
