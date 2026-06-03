@@ -2854,7 +2854,7 @@ async function gerarPDF() {
         const py=cY+cH-cH*i/steps;
         pdf.line(cX,py,cX+cW,py);
         const v=mx*i/steps;
-        const lbl=v.toLocaleString('pt-BR',{maximumFractionDigits:0});
+        const lbl=v>=1000?(v/1000).toFixed(v%1000===0?0:1)+'k':v.toFixed(0);
         setT(TEXT3);pdf.text(lbl,cX-0.5,py+1.3,{align:'right'});
       }
       // Bars
@@ -2877,7 +2877,7 @@ async function gerarPDF() {
         if(total>0){
           const topY=cY+cH-(total/mx)*cH;
           const fs=labels.length>25?3.8:4.2;
-          const lv=total.toLocaleString('pt-BR',{maximumFractionDigits:0});
+          const lv=total>=1000?(total/1000).toFixed(1)+'k':total.toFixed(0);
           setT(TEXT);pdf.setFont('helvetica','bold');pdf.setFontSize(fs);
           pdf.text(lv,bx+bW/2,topY-0.8,{align:'center'});
         }
