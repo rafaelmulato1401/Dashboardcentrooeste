@@ -1850,7 +1850,7 @@ function renderFerrovia() {
   });
   // Projetado e média usando volCarreg total (inclui hoje)
   const diasRestantesFerro = diasMes - diaD1;
-  const media = (isCurrentMonth && diaD1 > 0) ? volCarreg / diaD1 : 0;
+  const media = (isCurrentMonth && diaAtual > 0) ? volCarreg / diaAtual : volCarreg / diasMes;
   const projetado = (!isCurrentMonth || diaD1 === 0 || diaD1 >= diasMes)
     ? volCarreg
     : volCarreg + media * diasRestantesFerro;
@@ -3148,8 +3148,8 @@ async function gerarPDF() {
       const volD=db.descargas.filter(r=>r.terminal&&r.terminal.startsWith('rumo_')&&r.data&&r.data.startsWith(curM)).reduce((s,r)=>s+r.pesoDst,0)/1000;
       const saldo=volC-contrato;
       const fD1=fNotas.filter(r=>new Date(r.data+'T12:00:00').getDate()<=diaD1);
-      const medF=diaD1>0?volC/diaD1:0;
-      const projF=diaD1>=diasMes?volC:volC+medF*(diasMes-diaD1);
+      const medF=diaAtual>0?volC/diaAtual:volC/diasMes;
+      const projF=diaAtual>=diasMes?volC:volC+medF*(diasMes-diaAtual);
       const mdF=contrato/diasMes;
       const bkF=volC-(mdF*diaD1);
       const saldoMin=volC-minimo,custoF=tarifaF*volC;
@@ -3463,7 +3463,7 @@ async function renderFerroviaHTML(container) {
   const acumFerroD1=ferroNotasD1.reduce((s,r)=>s+r.qtde,0)/1000;
   const diasD1F=new Set(ferroNotasD1.filter(r=>r.qtde>0).map(r=>new Date(r.data+'T12:00:00').getDate())).size;
   const media=diasD1F>0?acumFerroD1/diasD1F:0;
-  const projetado=(diaD1>=diasMes)?volCarreg:(acumFerroD1+media*(diasMes-diaD1));
+  const projetado=(diaAtual>=diasMes)?volCarreg:(acumFerroD1+media*(diasMes-diaAtual));
   const saldoMin=volCarreg-minimo;
   const custo=tarifaFerro*volCarreg;
 
