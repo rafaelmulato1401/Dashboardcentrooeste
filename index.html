@@ -1430,6 +1430,12 @@ function classifyModal(transp, placa, nomeCliente, terminal, isUsina, rotina) {
 // ============================================================
 // RENDER TERMINAL
 // ============================================================
+// Filtro global: notas Ultra válidas — só dep 0.35 filial 1 e dep 0.34 filial 3
+// Compatível com dados antigos (dep='1','3') e novos ('0.35','0.34')
+function ultraDepsOk(r){
+  return (r.dep==='0.35' && (!r.gef||r.gef.endsWith('1')))
+      || (r.dep==='0.34' && (!r.gef||r.gef.endsWith('3')));
+}
 function renderTerminal(t) {
   const cfg      = db.config[t] || {};
   const color    = TERMINAL_MAP[t].color;
@@ -1451,10 +1457,6 @@ function renderTerminal(t) {
 
 
   // Notas: carregamentos saindo dos depósitos do terminal
-  // Para Ultra: filtrar apenas deps Rondon corretos — dep 0.35 filial 1 ou dep 0.34 filial 3
-  // Isso garante compatibilidade tanto com dados novos quanto com Firebase antigo
-  const ultraDepsOk = r => (r.dep==='0.35' && (!r.gef||r.gef.endsWith('1')))
-                         || (r.dep==='0.34' && (!r.gef||r.gef.endsWith('3')));
   const notas    = db.notas.filter(r => r.terminal === t && (t !== 'ultra' || ultraDepsOk(r)));
   const notasMes = notas.filter(r => r.data && r.data.startsWith(curMonth));
 
@@ -1809,7 +1811,8 @@ function renderFerrovia() {
   // ── Só Teciap e Ultracargo (não Centroeste) ──
   const ferroNotas = db.notas.filter(r =>
     r.modal === 'Ferroviário' &&
-    (r.terminal === 'teciap' || r.terminal === 'ultra') &&
+    (r.terminal === 'teciap' ||
+     (r.terminal === 'ultra' && ultraDepsOk(r))) &&
     r.data && r.data.startsWith(curMonth)
   );
   const volCarreg = ferroNotas.reduce((s,r) => s+r.qtde, 0) / 1000;
@@ -3433,7 +3436,7 @@ async function renderFerroviaHTML(container) {
   const _dn=new Date();const today=_dn.getFullYear()+'-'+String(_dn.getMonth()+1).padStart(2,'0')+'-'+String(_dn.getDate()).padStart(2,'0');
   const diaAtual=curMonth===today.substring(0,7)?new Date().getDate():diasMes;
   const diaD1=diaAtual-1;
-  const ferroNotas=db.notas.filter(r=>r.modal==='Ferroviário'&&(r.terminal==='teciap'||r.terminal==='ultra')&&r.data&&r.data.startsWith(curMonth));
+  const ferroNotas=db.notas.filter(r=>r.modal==='Ferroviário'&&(r.terminal==='teciap'||(r.terminal==='ultra'&&ultraDepsOk(r)))&&r.data&&r.data.startsWith(curMonth));
   const cfgFerroMes=(db.configHist[curMonth]||{}).ferro||db.config.ferro||{};
   const contrato=cfgFerroMes.contrato||88350;
   const minimo=cfgFerroMes.minimo||Math.round(contrato*0.95);
