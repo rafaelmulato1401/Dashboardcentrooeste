@@ -3179,7 +3179,7 @@ async function gerarPDF() {
       const CY0=KY2+KH+2.5,CLW=170,CRX2=M+CLW+4,CRW2=W-M-CRX2;
       const days=Array.from({length:diasMes},(_,i)=>i+1);
       const lbl31=days.map(d=>d+'/'+String(cm2).padStart(2,'0'));
-      const DINFO={11966:{l:'Logum',c:BLUE},7605:{l:'Paulínia',c:GOLD},3492:{l:'Dest.3492',c:'#0d6e7f'}};
+      const DINFO={11966:{l:'Logum',c:BLUE},7605:{l:'Paulínia',c:GOLD},3492:{l:'Dest.3492',c:'#0d6e7f'},9999:{l:'Ipiranga',c:'#b91c1c'}};
       const fDS=Object.entries(DINFO).map(([cod,info])=>({label:info.l,color:info.c,data:days.map(d=>fNotas.filter(r=>new Date(r.data+'T12:00:00').getDate()===d&&(r.nomeCliente||'').toUpperCase().includes(info.l.toUpperCase().split(' ')[0])).reduce((s,r)=>s+r.qtde,0)/1000||null)})).filter(ds=>ds.data.some(v=>v));
       if(!fDS.length)fDS.push({label:'Total',color:GOLD,data:days.map(d=>fNotas.filter(r=>new Date(r.data+'T12:00:00').getDate()===d).reduce((s,r)=>s+r.qtde,0)/1000||null)});
 
@@ -3219,24 +3219,29 @@ async function gerarPDF() {
       if(!prevDS.length) prevDS.push({label:'Sem dados de trânsito',data:prevLabels.map(()=>null),color:'#9aa3bb'});
       barChart(M,CY0+CH_F1+CH_F2+8,CLW,CH_F3,prevLabels,prevDS,'PREVISÃO DESCARGA NOS TERMINAIS (Rumo +5 dias)',BLUE);
 
-      // Carregamento por Destino table
-      const cliSet=new Set();fNotas.forEach(r=>{const c=(r.nomeCliente||'').trim();if(c)cliSet.add(c);});
-      const cliL=Array.from(cliSet).sort();
+      // Carregamento por Destino table — usa DINFO para colunas fixas
+      const pdfNfToCliente={};db.notas.forEach(r=>{const c=(r.nomeCliente||'').trim();if(c&&r.nf)pdfNfToCliente[r.nf]=c;});
+      const pdfGetCli=r=>{let c=(r.nomeCliente||'').trim();if(!c)c=(db.nfClienteMap&&db.nfClienteMap[r.terminal+'_'+r.nf]||'').trim();if(!c)c=(pdfNfToCliente[r.nf]||'').trim();return c.toUpperCase();};
+      const pdfMatchDest=cli=>{for(const[cod,info] of Object.entries(DINFO)){const kw=info.l.toUpperCase().split(' ')[0];if(kw&&cli.includes(kw))return parseInt(cod);}return 0;};
+      // Colunas: apenas destinos com dados no mês
+      const pdfDestSet=new Set();fNotas.forEach(r=>{pdfDestSet.add(pdfMatchDest(pdfGetCli(r)));});
+      const pdfCols=[...Object.keys(DINFO).map(Number).filter(c=>pdfDestSet.has(c)),...(pdfDestSet.has(0)?[0]:[])];
+      const pdfColLbl=cod=>cod===0?'Outros':(DINFO[cod]?.l||String(cod));
       const dtCW=Math.floor(CRW2*0.15);
-      const totCW=Math.floor(CRW2*0.17);
-      const cliCW=(CRW2-dtCW-totCW)/Math.max(cliL.length,1);
-      const dstCols=[['Data',dtCW],...cliL.map(c=>[c.length>9?c.substring(0,8)+'.':c,cliCW,'right']),['Total',totCW,'right']];
+      const totCW=Math.floor(CRW2*0.15);
+      const cliCW=(CRW2-dtCW-totCW)/Math.max(pdfCols.length,1);
+      const dstCols=[['Data',dtCW],...pdfCols.map(c=>[pdfColLbl(c),cliCW,'right']),['Total',totCW,'right']];
       tblTitle(CRX2,CY0,'CARREGAMENTO POR DESTINO',BLUE);
       tblHead(CRX2,CY0+2,CRW2,dstCols,BLUE);
-      let ri=0,gT=0,cTots={};cliL.forEach(c=>cTots[c]=0);
+      let ri=0,gT=0,cTots={};pdfCols.forEach(c=>cTots[c]=0);
       days.forEach(d=>{
         const dt=cy2+'-'+String(cm2).padStart(2,'0')+'-'+String(d).padStart(2,'0');
         const dn=fNotas.filter(r=>r.data===dt);if(!dn.length)return;
         const tot=dn.reduce((s,r)=>s+r.qtde,0)/1000;gT+=tot;
-        const vals=[d+'/'+String(cm2).padStart(2,'0'),...cliL.map(c=>{const v=dn.filter(r=>(r.nomeCliente||'')===c).reduce((s,r)=>s+r.qtde,0)/1000;cTots[c]+=v;return v?f(v):'-';}),f(tot)];
+        const vals=[d+'/'+String(cm2).padStart(2,'0'),...pdfCols.map(c=>{const v=dn.filter(r=>pdfMatchDest(pdfGetCli(r))===c).reduce((s,r)=>s+r.qtde,0)/1000;cTots[c]+=v;return v?f(v):'-';}),f(tot)];
         tblRow(CRX2,CY0+7.5+ri*ROW_H,CRW2,dstCols,vals,ri%2?BG:null);ri++;
       });
-      tblRow(CRX2,CY0+7.5+ri*ROW_H,CRW2,dstCols,['Total',...cliL.map(c=>cTots[c]?f(cTots[c]):'-'),f(gT)],'#dce7f5',BLUE,true);
+      tblRow(CRX2,CY0+7.5+ri*ROW_H,CRW2,dstCols,['Total',...pdfCols.map(c=>cTots[c]?f(cTots[c]):'-'),f(gT)],'#dce7f5',BLUE,true);
     }
 
     // ═══════════════════════════════════
