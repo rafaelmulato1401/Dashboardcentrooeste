@@ -1812,8 +1812,7 @@ function renderFerrovia() {
   // ── Só Teciap e Ultracargo (não Centroeste) ──
   const ferroNotas = db.notas.filter(r =>
     r.modal === 'Ferroviário' &&
-    (r.terminal === 'teciap' ||
-     (r.terminal === 'ultra' && ultraDepsOk(r))) &&
+    (r.terminal === 'teciap' || r.terminal === 'ultra') &&
     r.data && r.data.startsWith(curMonth)
   );
   const volCarreg = ferroNotas.reduce((s,r) => s+r.qtde, 0) / 1000;
@@ -3447,7 +3446,7 @@ async function renderFerroviaHTML(container) {
   const _dn=new Date();const today=_dn.getFullYear()+'-'+String(_dn.getMonth()+1).padStart(2,'0')+'-'+String(_dn.getDate()).padStart(2,'0');
   const diaAtual=curMonth===today.substring(0,7)?new Date().getDate():diasMes;
   const diaD1=diaAtual-1;
-  const ferroNotas=db.notas.filter(r=>r.modal==='Ferroviário'&&(r.terminal==='teciap'||(r.terminal==='ultra'&&ultraDepsOk(r)))&&r.data&&r.data.startsWith(curMonth));
+  const ferroNotas=db.notas.filter(r=>r.modal==='Ferroviário'&&(r.terminal==='teciap'||r.terminal==='ultra')&&r.data&&r.data.startsWith(curMonth));
   const cfgFerroMes=(db.configHist[curMonth]||{}).ferro||db.config.ferro||{};
   const contrato=cfgFerroMes.contrato||88350;
   const minimo=cfgFerroMes.minimo||Math.round(contrato*0.95);
