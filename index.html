@@ -2002,7 +2002,7 @@ function renderFerrovia() {
   const prevByDate = {};
   rumoFilt.forEach(r => {
     if(!r.prevChegada) return;
-    if(!prevByDate[r.prevChegada]) prevByDate[r.prevChegada] = {11966:0, 7605:0, 3492:0};
+    if(!prevByDate[r.prevChegada]) prevByDate[r.prevChegada] = {11966:0, 7605:0, 3492:0}; // 9999=Ipiranga não aparece no trânsito
     const cod = Number(r.clienteCod||0);
     if(prevByDate[r.prevChegada][cod] !== undefined)
       prevByDate[r.prevChegada][cod] += r.pesoLiq/1000;
@@ -2010,17 +2010,18 @@ function renderFerrovia() {
 
   const allPrevDates = Object.keys(prevByDate).sort();
   // Build labels and datasets for prev chart (show relevant dates around today)
+  const RUMO_CODS = [11966, 7605, 3492]; // Apenas destinos Rumo para previsão de trânsito
   const prevLabels = [], prevDests = {11966:[], 7605:[], 3492:[]};
   allPrevDates.forEach(date => {
     const diff = Math.round((new Date(date+'T12:00:00') - new Date(today2+'T12:00:00'))/86400000);
     if(diff < -5 || diff > 14) return;
     const lbl = diff===0 ? 'D' : (diff>0 ? 'D+'+diff : 'D'+diff);
     prevLabels.push(lbl);
-    DEST_CODS.forEach(cod => prevDests[cod].push(prevByDate[date][cod]||null));
+    RUMO_CODS.forEach(cod => prevDests[cod].push(prevByDate[date][cod]||null));
   });
 
   if(ferroDestSel === 'geral') {
-    const prevDatasets = DEST_CODS.map(cod => ({
+    const prevDatasets = RUMO_CODS.map(cod => ({
       label: DEST_MAP[cod].label,
       data: prevDests[cod],
       backgroundColor: DEST_MAP[cod].color+'cc',
