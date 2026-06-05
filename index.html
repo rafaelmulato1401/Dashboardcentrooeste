@@ -367,6 +367,7 @@
       <option value="geral">🌐 Geral (todos os destinos)</option>
       <option value="11966">Logum Logística SA (11966)</option>
       <option value="7605">Terminal Paulínia SA (7605)</option>
+      <option value="9999">Ipiranga Produtos de Petróleo S.A.</option>
       <option value="3492">Destino 3492</option>
     </select>
     <div style="font-size:10px;color:var(--text3)">Aplica nos 3 gráficos abaixo</div>
@@ -1915,11 +1916,12 @@ function renderFerrovia() {
   // Gráfico 1: Carregamento ferroviário (Teciap + Ultra) por dia
   // ── Mapa de destinos: código -> cor e label ──
   const DEST_MAP = {
-    11966: { label:'Logum Logística', color:'#1a3a6b' },
-    7605:  { label:'Terminal Paulínia', color:'#f0a500' },
-    3492:  { label:'Destino 3492', color:'#1a6b35' },
+    11966: { label:'Logum Logística',  color:'#1a3a6b' },
+    7605:  { label:'Terminal Paulínia',color:'#f0a500' },
+    3492:  { label:'Destino 3492',     color:'#1a6b35' },
+    9999:  { label:'Ipiranga',         color:'#b91c1c' },
   };
-  const DEST_CODS = [11966, 7605, 3492];
+  const DEST_CODS = [11966, 7605, 3492, 9999];
 
   // ── GRÁFICO 1: Carregamento Ferroviário (Notas Fiscais - Teciap+Ultra) ──
   // Filtrado pelo destino selecionado via clienteCod nas notas
