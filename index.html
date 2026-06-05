@@ -2063,62 +2063,71 @@ function renderFerrovia() {
   const pbody=document.getElementById('ferroDescPrevBody');
   if(pbody) pbody.innerHTML=ferroDescRows;
 
-  // ── TABELA DINÂMICA por cliente/destino ──
-  // Pegar todos os clientes únicos com volume no mês (das notas Teciap+Ultra ferro)
-  // Clientes únicos das notas ferro
-  // Fontes: 1) r.nomeCliente direto, 2) nfClienteMap, 3) varrer db.notas pelo nf
+  // ── TABELA CARREGAMENTO POR DESTINO ──
+  // Usa DEST_MAP como colunas fixas — agrupa notas pelo nomeCliente contendo a label do destino
+  // Inclui coluna "Outros" para notas sem destino identificado
   const nfToCliente = {};
-  db.notas.forEach(r => { 
-    const c = (r.nomeCliente||'').trim(); 
-    if(c && r.nf) nfToCliente[r.nf] = c; 
-  });
-  const clienteSet = new Set();
-  ferroNotas.forEach(r => {
+  db.notas.forEach(r => { const c=(r.nomeCliente||'').trim(); if(c&&r.nf) nfToCliente[r.nf]=c; });
+
+  // Destinos que aparecem na tabela = DEST_MAP exceto 3492 (sem nome real)
+  const tblDests = Object.entries(DEST_MAP)
+    .filter(([cod]) => cod !== '3492' && cod !== '9999')
+    .concat([['9999', DEST_MAP[9999]]]);
+  // Adicionar Ipiranga e Outros dinamicamente
+  // Verificar quais destinos têm dados no mês
+  const getCliLabel = r => {
     let cli = (r.nomeCliente||'').trim();
     if(!cli) cli = (db.nfClienteMap[r.terminal+'_'+r.nf]||'').trim();
     if(!cli) cli = (nfToCliente[r.nf]||'').trim();
-    if(cli) clienteSet.add(cli);
-  });
-  const clientesList = Array.from(clienteSet).sort();
-  const hasCli = clientesList.length > 0;
+    return cli.toUpperCase();
+  };
 
-  let theadHtml = `<tr><th>Data</th>${hasCli ? clientesList.map(c=>`<th>${c}</th>`).join('') : ''}<th>Total</th></tr>`;
+  // Mapear cada nota para um destino conhecido pela label
+  const matchDest = cliUp => {
+    for(const [cod, {label}] of Object.entries(DEST_MAP)) {
+      const kw = label.toUpperCase().split(' ')[0];
+      if(kw && cliUp.includes(kw)) return parseInt(cod);
+    }
+    return 0; // Outros
+  };
+
+  // Descobrir quais destinos têm dados no mês (colunas dinâmicas)
+  const destCodSet = new Set();
+  ferroNotas.forEach(r => { const c=getCliLabel(r); if(c){ const d=matchDest(c); destCodSet.add(d); }});
+  // Ordenar: destinos conhecidos primeiro (na ordem do DEST_MAP), depois 0=Outros
+  const tblCols = [...DEST_CODS.filter(c=>destCodSet.has(c)), ...(destCodSet.has(0)?[0]:[])];
+
+  const colLabel = cod => cod===0 ? 'Outros' : (DEST_MAP[cod]?.label || String(cod));
+
+  let theadHtml = `<tr><th>Data</th>${tblCols.map(c=>`<th>${colLabel(c)}</th>`).join('')}<th>Total</th></tr>`;
   let tbodyHtml = '';
-  let colTotals = new Array(clientesList.length).fill(0);
+  let colTotals = new Array(tblCols.length).fill(0);
   let grandTotal = 0;
 
   days.forEach(d => {
     const date = `${cy}-${String(cm).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const dayNotas = ferroNotas.filter(r => r.data === date);
-    if (!dayNotas.length) return;
+    if(!dayNotas.length) return;
     const dayTotal = dayNotas.reduce((s,r)=>s+r.qtde,0)/1000;
     grandTotal += dayTotal;
     let row = `<td>${d}/${String(cm).padStart(2,'0')}</td>`;
-    if (hasCli) {
-      clientesList.forEach((c,i) => {
-        const v = dayNotas.filter(r=>{
-          let cli = (r.nomeCliente||'').trim();
-          if(!cli) cli = (db.nfClienteMap[r.terminal+'_'+r.nf]||'').trim();
-          if(!cli) cli = (nfToCliente[r.nf]||'').trim();
-          return cli === c;
-        }).reduce((s,r)=>s+r.qtde,0)/1000;
-        colTotals[i] += v;
-        row += `<td>${v?fmt(v):'-'}</td>`;
-      });
-    }
+    tblCols.forEach((cod,i) => {
+      const v = dayNotas.filter(r => matchDest(getCliLabel(r)) === cod)
+                        .reduce((s,r)=>s+r.qtde,0)/1000;
+      colTotals[i] += v;
+      row += `<td>${v?fmt(v):'-'}</td>`;
+    });
     row += `<td>${dayTotal?fmt(dayTotal):'-'}</td>`;
     tbodyHtml += `<tr>${row}</tr>`;
   });
 
-  // Linha total
   let totalRow = `<td>Total</td>`;
-  if (hasCli) totalRow += colTotals.map(v=>`<td>${v?fmt(v):'-'}</td>`).join('');
+  totalRow += colTotals.map(v=>`<td>${v?fmt(v):'-'}</td>`).join('');
   totalRow += `<td>${grandTotal?fmt(grandTotal):'-'}</td>`;
   tbodyHtml += `<tr class="total-row">${totalRow}</tr>`;
 
-  // Atualizar cabeçalho da tabela dinamicamente
   const ferroHead = document.getElementById('ferroDailyHead');
-  if (ferroHead) ferroHead.innerHTML = theadHtml;
+  if(ferroHead) ferroHead.innerHTML = theadHtml;
   document.getElementById('ferroDailyBody').innerHTML = tbodyHtml;
 
 
