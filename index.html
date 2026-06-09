@@ -2258,8 +2258,8 @@ function renderTopChart(){
       acVol += vol||0;
       acTake += minimo;
       labels.push(MONTHS[m]);
-      volDia.push(vol||null);                      // Barra verde = volume realizado
-      delta.push(vol ? vol - minimo : null);       // Barra roxa = delta vs mínimo
+      volDia.push(minimo||null);                   // Barra verde = mínimo contratual (base)
+      delta.push(vol != null ? vol - minimo : null); // Barra roxa = delta empilhado sobre/sob verde
       takeLinhaD.push(minimo);                     // Linha vermelha = mínimo contratual
       qtdeAC.push(acVol||null);                    // Linha laranja = acumulado real
       takeAC.push(acTake);                         // Linha azul = Take acumulado
@@ -2283,8 +2283,8 @@ function renderTopChart(){
       acTake += volumeMinimodia;
       const isFuture = dt > today;
       labels.push(`${d}/${mStr}`);
-      volDia.push(isFuture ? null : (vol||null));
-      delta.push(isFuture ? null : (vol ? vol - volumeMinimodia : null));
+      volDia.push(isFuture ? null : volumeMinimodia); // verde = mínimo diário (base)
+      delta.push(isFuture ? null : (vol != null ? vol - volumeMinimodia : null)); // roxa = delta empilhado
       qtdeAC.push(isFuture ? null : (acVol||null));
       takeAC.push(acTake);
       takeLinhaD.push(volumeMinimodia);
@@ -2301,9 +2301,9 @@ function renderTopChart(){
     data:{
       labels,
       datasets:[
-        // Barras lado a lado (grouped) — verde e roxa
-        { type:'bar',  label:'Volume Mínimo/dia (m³)', data:volDia,    backgroundColor:'#22c55e', borderColor:'#16a34a', borderWidth:1, borderRadius:3, order:3, yAxisID:'y' },
-        { type:'bar',  label:'Delta Execução (m³)',    data:delta,     backgroundColor:'#a855f7', borderColor:'#7c3aed', borderWidth:1, borderRadius:3, order:3, yAxisID:'y' },
+        // Barras empilhadas — verde (base) e roxa (delta sobre/sob a verde)
+        { type:'bar',  label:'Volume Mínimo/dia (m³)', data:volDia,    backgroundColor:'#22c55e', borderColor:'#16a34a', borderWidth:1, borderRadius:3, order:3, yAxisID:'y', stack:'bars' },
+        { type:'bar',  label:'Delta Execução (m³)',    data:delta,     backgroundColor:'#a855f7', borderColor:'#7c3aed', borderWidth:1, borderRadius:3, order:3, yAxisID:'y', stack:'bars' },
         // Linhas sobrepostas às barras
         { type:'line', label:'Take or Pay (m³)',       data:takeLinhaD,borderColor:'#ef4444', backgroundColor:'transparent', borderWidth:2, borderDash:[6,3], pointRadius:0, order:1, yAxisID:'y' },
         { type:'line', label:'Qtde AC (m³)',           data:qtdeAC,    borderColor:'#f97316', backgroundColor:'transparent', borderWidth:2, pointRadius:0, tension:0.3, order:1, yAxisID:'y2' },
