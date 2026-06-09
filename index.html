@@ -2249,26 +2249,21 @@ function renderTopChart(){
 
   if(val === 'anual'){
     // Modo anual: cada ponto = um mês
-    for(let m=0;m<12;m++){
-      const pad = String(m+1).padStart(2,'0');
-      const vol = notas.filter(r=>r.data&&r.data.startsWith(`${curYear}-${pad}`)).reduce((s,r)=>s+r.qtde,0)/1000;
-      const contrato = getContratoMes(m);
-      const minimo = getMinimoMes(m);
-      labels.push(MONTHS[m]);
-      volDia.push(vol||null);
-      takeLinhaD.push(minimo/new Date(curYear,m+1,0).getDate()); // volume mínimo/dia
-      delta.push(vol ? vol - minimo : null);
-    }
-    // Acumulados anuais
     let acVol=0, acTake=0;
     for(let m=0;m<12;m++){
       const pad = String(m+1).padStart(2,'0');
       const vol = notas.filter(r=>r.data&&r.data.startsWith(`${curYear}-${pad}`)).reduce((s,r)=>s+r.qtde,0)/1000;
+      const minimo = getMinimoMes(m);
+      const contrato = getContratoMes(m);
       acVol += vol||0;
-      acTake += getMinimoMes(m);
-      qtdeAC.push(acVol||null);
-      takeAC.push(acTake);
-      takeMensal.push(getContratoMes(m));
+      acTake += minimo;
+      labels.push(MONTHS[m]);
+      volDia.push(vol||null);                      // Barra verde = volume realizado
+      delta.push(vol ? vol - minimo : null);       // Barra roxa = delta vs mínimo
+      takeLinhaD.push(minimo);                     // Linha vermelha = mínimo contratual
+      qtdeAC.push(acVol||null);                    // Linha laranja = acumulado real
+      takeAC.push(acTake);                         // Linha azul = Take acumulado
+      takeMensal.push(contrato);                   // Linha preta = contrato mensal
     }
   } else {
     // Modo mensal: dia a dia
@@ -2306,12 +2301,14 @@ function renderTopChart(){
     data:{
       labels,
       datasets:[
+        // Barras lado a lado (grouped) — verde e roxa
         { type:'bar',  label:'Volume Mínimo/dia (m³)', data:volDia,    backgroundColor:'#22c55e', borderColor:'#16a34a', borderWidth:1, borderRadius:3, order:3, yAxisID:'y' },
         { type:'bar',  label:'Delta Execução (m³)',    data:delta,     backgroundColor:'#a855f7', borderColor:'#7c3aed', borderWidth:1, borderRadius:3, order:3, yAxisID:'y' },
+        // Linhas sobrepostas às barras
         { type:'line', label:'Take or Pay (m³)',       data:takeLinhaD,borderColor:'#ef4444', backgroundColor:'transparent', borderWidth:2, borderDash:[6,3], pointRadius:0, order:1, yAxisID:'y' },
-        { type:'line', label:'Qtde AC (m³)',           data:qtdeAC,    borderColor:'#f97316', backgroundColor:'transparent', borderWidth:2, pointRadius:0, order:1, yAxisID:'y2' },
-        { type:'line', label:'Take AC (m³)',           data:takeAC,    borderColor:'#38bdf8', backgroundColor:'transparent', borderWidth:2, pointRadius:0, order:1, yAxisID:'y2' },
-        { type:'line', label:'Take Mensal (m³)',       data:takeMensal,borderColor:'#1e293b', backgroundColor:'transparent', borderWidth:2.5, pointRadius:0, order:1, yAxisID:'y2' },
+        { type:'line', label:'Qtde AC (m³)',           data:qtdeAC,    borderColor:'#f97316', backgroundColor:'transparent', borderWidth:2, pointRadius:0, tension:0.3, order:1, yAxisID:'y2' },
+        { type:'line', label:'Take AC (m³)',           data:takeAC,    borderColor:'#38bdf8', backgroundColor:'transparent', borderWidth:2, pointRadius:0, tension:0.3, order:1, yAxisID:'y2' },
+        { type:'line', label:'Take Mensal (m³)',       data:takeMensal,borderColor:'#0f172a', backgroundColor:'transparent', borderWidth:2.5, pointRadius:0, order:1, yAxisID:'y2' },
       ]
     },
     options:{
@@ -2322,8 +2319,8 @@ function renderTopChart(){
         tooltip:{ callbacks:{ label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toLocaleString('pt-BR',{maximumFractionDigits:1}):'-'} m³` } }
       },
       scales:{
-        x:{ ticks:{ color:'var(--text2)', font:{size:10} }, grid:{ color:'rgba(255,255,255,.06)' } },
-        y:{ position:'left',  ticks:{ color:'var(--text2)', font:{size:10}, callback:v=>v>=1000?(v/1000).toFixed(v%1000===0?0:1)+'k':v }, grid:{ color:'rgba(255,255,255,.06)' }, title:{ display:true, text:'m³ / dia', color:'var(--text2)', font:{size:10} } },
+        x:{ ticks:{ color:'var(--text2)', font:{size:10}, maxRotation:45 }, grid:{ color:'rgba(255,255,255,.06)' } },
+        y:{ position:'left', ticks:{ color:'var(--text2)', font:{size:10}, callback:v=>v>=1000?(v/1000).toFixed(v%1000===0?0:1)+'k':v }, grid:{ color:'rgba(255,255,255,.06)' }, title:{ display:true, text:'m³ / dia', color:'var(--text2)', font:{size:10} } },
         y2:{ position:'right', ticks:{ color:'var(--text2)', font:{size:10}, callback:v=>v>=1000?(v/1000).toFixed(1)+'k':v }, grid:{ display:false }, title:{ display:true, text:'m³ acumulado', color:'var(--text2)', font:{size:10} } }
       }
     }
