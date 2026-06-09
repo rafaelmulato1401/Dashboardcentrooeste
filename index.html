@@ -435,7 +435,7 @@
   </div>
 
   <!-- 4 Trimestres em grid 2x2 -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
     <div>
       <div class="card-title" style="margin-bottom:8px">1º Trimestre</div>
       <table class="top-table"><thead><tr><th>Mês</th><th>Faturado</th><th>Mín. Contratual</th><th>Índice</th><th>Contrato</th><th>Índice</th></tr></thead><tbody id="topQ1Body"></tbody></table>
@@ -451,6 +451,22 @@
     <div>
       <div class="card-title" style="margin-bottom:8px">4º Trimestre</div>
       <table class="top-table"><thead><tr><th>Mês</th><th>Faturado</th><th>Mín. Contratual</th><th>Índice</th><th>Contrato</th><th>Índice</th></tr></thead><tbody id="topQ4Body"></tbody></table>
+    </div>
+  </div>
+
+  <!-- GRÁFICO TAKE OR PAY DIA A DIA -->
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+      <div class="card-title" style="margin:0">Execução <span style="color:var(--gold)">Dia a Dia</span></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px">Visualização:</label>
+        <select id="topChartMesSel" onchange="renderTopChart()" style="padding:6px 10px;background:var(--blue-mid);border:1px solid var(--border);border-radius:6px;color:#fff;font-size:12px;font-weight:700">
+          <option value="anual">Anual (todos os meses)</option>
+        </select>
+      </div>
+    </div>
+    <div style="position:relative;height:380px">
+      <canvas id="topChartCanvas"></canvas>
     </div>
   </div>
 </div>
@@ -2184,6 +2200,134 @@ function renderTakeOrPay(){
   buildTopTable([6,7,8],'topQ3Body');
   buildTopTable([9,10,11],'topQ4Body');
 
+  // Popular seletor de mês do gráfico
+  const topSel = document.getElementById('topChartMesSel');
+  if(topSel){
+    // Manter opção anual + meses com dados
+    const mesesComDados = [];
+    for(let m=0;m<12;m++){
+      if(monthlyVol(m) > 0) mesesComDados.push(m);
+    }
+    const curSelVal = topSel.value;
+    topSel.innerHTML = '<option value="anual">Anual (todos os meses)</option>';
+    mesesComDados.forEach(m => {
+      const mk = curYear+'-'+String(m+1).padStart(2,'0');
+      topSel.innerHTML += `<option value="${mk}">${MONTHS[m]}/${curYear}</option>`;
+    });
+    // Restaurar seleção ou selecionar mês atual
+    if([...topSel.options].some(o=>o.value===curSelVal)) topSel.value=curSelVal;
+    else {
+      const curMk = getCurMonth();
+      if([...topSel.options].some(o=>o.value===curMk)) topSel.value=curMk;
+    }
+  }
+  renderTopChart();
+}
+
+// ── GRÁFICO TAKE OR PAY DIA A DIA ──
+let topChartInst = null;
+function renderTopChart(){
+  const sel = document.getElementById('topChartMesSel');
+  if(!sel) return;
+  const val = sel.value;
+  const curYear = parseInt(getCurMonth().split('-')[0]);
+  const notas = db.notas.filter(r=>r.modal==='Ferroviário'&&(r.terminal==='teciap'||r.terminal==='ultra'));
+
+  const getContratoMes = m => {
+    const mk = curYear+'-'+String(m+1).padStart(2,'0');
+    return (db.configHist[mk]?.ferro?.contrato)||88350;
+  };
+  const getMinimoMes = m => {
+    const mk = curYear+'-'+String(m+1).padStart(2,'0');
+    const cfg = db.configHist[mk]?.ferro;
+    if(cfg?.minimo) return cfg.minimo;
+    if(cfg?.contrato) return Math.round(cfg.contrato*0.95);
+    return 83933;
+  };
+
+  let labels=[], volDia=[], delta=[], qtdeAC=[], takeAC=[], takeLinhaD=[], takeMensal=[];
+
+  if(val === 'anual'){
+    // Modo anual: cada ponto = um mês
+    for(let m=0;m<12;m++){
+      const pad = String(m+1).padStart(2,'0');
+      const vol = notas.filter(r=>r.data&&r.data.startsWith(`${curYear}-${pad}`)).reduce((s,r)=>s+r.qtde,0)/1000;
+      const contrato = getContratoMes(m);
+      const minimo = getMinimoMes(m);
+      labels.push(MONTHS[m]);
+      volDia.push(vol||null);
+      takeLinhaD.push(minimo/new Date(curYear,m+1,0).getDate()); // volume mínimo/dia
+      delta.push(vol ? vol - minimo : null);
+    }
+    // Acumulados anuais
+    let acVol=0, acTake=0;
+    for(let m=0;m<12;m++){
+      const pad = String(m+1).padStart(2,'0');
+      const vol = notas.filter(r=>r.data&&r.data.startsWith(`${curYear}-${pad}`)).reduce((s,r)=>s+r.qtde,0)/1000;
+      acVol += vol||0;
+      acTake += getMinimoMes(m);
+      qtdeAC.push(acVol||null);
+      takeAC.push(acTake);
+      takeMensal.push(getContratoMes(m));
+    }
+  } else {
+    // Modo mensal: dia a dia
+    const [y,mStr] = val.split('-');
+    const m = parseInt(mStr)-1;
+    const diasMes = new Date(parseInt(y),m+1,0).getDate();
+    const contrato = getContratoMes(m);
+    const minimo = getMinimoMes(m);
+    const volumeMinimodia = minimo/diasMes;
+    const today = localDateStr(new Date());
+
+    let acVol=0, acTake=0;
+    for(let d=1;d<=diasMes;d++){
+      const dt = `${y}-${mStr}-${String(d).padStart(2,'0')}`;
+      const vol = notas.filter(r=>r.data===dt).reduce((s,r)=>s+r.qtde,0)/1000;
+      acVol += vol||0;
+      acTake += volumeMinimodia;
+      const isFuture = dt > today;
+      labels.push(`${d}/${mStr}`);
+      volDia.push(isFuture ? null : (vol||null));
+      delta.push(isFuture ? null : (vol ? vol - volumeMinimodia : null));
+      qtdeAC.push(isFuture ? null : (acVol||null));
+      takeAC.push(acTake);
+      takeLinhaD.push(volumeMinimodia);
+      takeMensal.push(contrato);
+    }
+  }
+
+  const canvas = document.getElementById('topChartCanvas');
+  if(!canvas) return;
+  if(topChartInst){ topChartInst.destroy(); topChartInst=null; }
+
+  topChartInst = new Chart(canvas, {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        { type:'bar',  label:'Volume Mínimo/dia (m³)', data:volDia,    backgroundColor:'#22c55e', borderColor:'#16a34a', borderWidth:1, borderRadius:3, order:3, yAxisID:'y' },
+        { type:'bar',  label:'Delta Execução (m³)',    data:delta,     backgroundColor:'#a855f7', borderColor:'#7c3aed', borderWidth:1, borderRadius:3, order:3, yAxisID:'y' },
+        { type:'line', label:'Take or Pay (m³)',       data:takeLinhaD,borderColor:'#ef4444', backgroundColor:'transparent', borderWidth:2, borderDash:[6,3], pointRadius:0, order:1, yAxisID:'y' },
+        { type:'line', label:'Qtde AC (m³)',           data:qtdeAC,    borderColor:'#f97316', backgroundColor:'transparent', borderWidth:2, pointRadius:0, order:1, yAxisID:'y2' },
+        { type:'line', label:'Take AC (m³)',           data:takeAC,    borderColor:'#38bdf8', backgroundColor:'transparent', borderWidth:2, pointRadius:0, order:1, yAxisID:'y2' },
+        { type:'line', label:'Take Mensal (m³)',       data:takeMensal,borderColor:'#1e293b', backgroundColor:'transparent', borderWidth:2.5, pointRadius:0, order:1, yAxisID:'y2' },
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{
+        legend:{ position:'bottom', labels:{ color:'var(--text1)', font:{size:11}, boxWidth:14, padding:16 } },
+        tooltip:{ callbacks:{ label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toLocaleString('pt-BR',{maximumFractionDigits:1}):'-'} m³` } }
+      },
+      scales:{
+        x:{ ticks:{ color:'var(--text2)', font:{size:10} }, grid:{ color:'rgba(255,255,255,.06)' } },
+        y:{ position:'left',  ticks:{ color:'var(--text2)', font:{size:10}, callback:v=>v>=1000?(v/1000).toFixed(v%1000===0?0:1)+'k':v }, grid:{ color:'rgba(255,255,255,.06)' }, title:{ display:true, text:'m³ / dia', color:'var(--text2)', font:{size:10} } },
+        y2:{ position:'right', ticks:{ color:'var(--text2)', font:{size:10}, callback:v=>v>=1000?(v/1000).toFixed(1)+'k':v }, grid:{ display:false }, title:{ display:true, text:'m³ acumulado', color:'var(--text2)', font:{size:10} } }
+      }
+    }
+  });
 }
 
 // ============================================================
