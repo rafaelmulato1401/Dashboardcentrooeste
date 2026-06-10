@@ -1866,10 +1866,12 @@ function renderFerrovia() {
   });
   // Projetado e média usando volCarreg total (inclui hoje)
   const diasRestantesFerro = diasMes - diaD1;
-  const media = (isCurrentMonth && diaAtual > 0) ? volCarreg / diaAtual : volCarreg / diasMes;
+  // Media = acumulado até D-1 / (diaAtual-1), projetado = media * diasMes
+  const acumD1Ferro = ferroNotas.filter(r=>new Date(r.data+'T12:00:00').getDate()<=diaD1).reduce((s,r)=>s+r.qtde,0)/1000;
+  const media = (isCurrentMonth && diaD1 > 0) ? acumD1Ferro / diaD1 : volCarreg / diasMes;
   const projetado = (!isCurrentMonth || diaD1 === 0 || diaD1 >= diasMes)
     ? volCarreg
-    : volCarreg + media * diasRestantesFerro;
+    : media * diasMes; // projetado = média D-1 × dias do mês
 
   // ── BACKLOG FERROVIA ──
   // Fórmula: (Contrato/diasMes) × diaD1 = Meta até D-1
@@ -3289,8 +3291,10 @@ async function gerarPDF() {
       const volD=db.descargas.filter(r=>r.terminal&&r.terminal.startsWith('rumo_')&&r.data&&r.data.startsWith(curM)).reduce((s,r)=>s+r.pesoDst,0)/1000;
       const saldo=volC-contrato;
       const fD1=fNotas.filter(r=>new Date(r.data+'T12:00:00').getDate()<=diaD1);
-      const medF=diaAtual>0?volC/diaAtual:volC/diasMes;
-      const projF=diaAtual>=diasMes?volC:volC+medF*(diasMes-diaAtual);
+      const fD1notas=fNotas.filter(r=>new Date(r.data+'T12:00:00').getDate()<=diaD1);
+      const acumD1F=fD1notas.reduce((s,r)=>s+r.qtde,0)/1000;
+      const medF=diaD1>0?acumD1F/diaD1:volC/diasMes;
+      const projF=diaD1>=diasMes?volC:medF*diasMes;
       const mdF=contrato/diasMes;
       const bkF=volC-(mdF*diaD1);
       const saldoMin=volC-minimo,custoF=tarifaF*volC;
@@ -3604,7 +3608,8 @@ async function renderFerroviaHTML(container) {
   const acumFerroD1=ferroNotasD1.reduce((s,r)=>s+r.qtde,0)/1000;
   const diasD1F=new Set(ferroNotasD1.filter(r=>r.qtde>0).map(r=>new Date(r.data+'T12:00:00').getDate())).size;
   const media=diasD1F>0?acumFerroD1/diasD1F:0;
-  const projetado=(diaAtual>=diasMes)?volCarreg:(acumFerroD1+media*(diasMes-diaAtual));
+  // Projetado = media_D1 * diasMes (média baseada em D-1)
+  const projetado=(diaAtual>=diasMes)?volCarreg:(media*diasMes);
   const saldoMin=volCarreg-minimo;
   const custo=tarifaFerro*volCarreg;
 
