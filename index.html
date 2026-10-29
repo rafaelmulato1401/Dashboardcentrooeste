@@ -1449,8 +1449,9 @@ function processNotas(rows) {
     // isUsina=false: NFs in processNotas are ALWAYS from terminal's own depot
     const modal=classifyModal(transp,placa,nomeCliente,terminal,false,rotina);
     const gef=String(r[gefIdx]||'');
-    const fPart=gef.split('-').map(s=>s.trim());
-    const fNum=parseInt(fPart[2])||1;
+    // GEF pode ser "1 / 1 / 1" (barras) ou "1-1-1" (hífens) — split por ambos
+    const fPart=gef.split(/[\-\/]/).map(s=>s.trim()).filter(Boolean);
+    const fNum=parseInt(fPart[2]||fPart[fPart.length-1])||1;
     // Considerar apenas filiais 1 (Sinop) e 3 (Nova Mutum) — ignorar depósitos de outras filiais
     if(fNum!==1 && fNum!==3) { skipped++; continue; }
     const filial=FILIAL_MAP[fNum]||'Sinop';
@@ -1460,8 +1461,8 @@ function processNotas(rows) {
      // Produto map: chave filial_nf -> produto
     const descItem = String(r[24]||'').trim().toUpperCase();
     const produto = descItem.includes('ANIDRO') ? 'Anidro' : descItem.includes('HIDRAT') ? 'Hidratado' : '';
-    const fNumNota = parseInt(String(r[gefIdx]||'').split('-').pop()) || 0;
-    if(produto && nf) db.produtoMap[fNumNota+'_'+nf] = produto;
+    // Chave do produtoMap usa o mesmo número de filial lido do GEF
+    if(produto && nf) db.produtoMap[fNum+'_'+nf] = produto;
     // nfClienteMap: chave terminal_nf -> nomeCliente (para tabela de destinos)
     if(nomeClienteRaw && nf) db.nfClienteMap[terminal+'_'+nf] = nomeClienteRaw;
     // clienteCod via dep (para modal/ferrovia), clienteNota = Cód. Cliente real da NF
