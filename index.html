@@ -647,6 +647,7 @@
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px">
         <button class="btn-clear-data" onclick="clearDescargasMes()">🗑️ Limpar por Mês/Terminal</button>
         <button class="btn-clear-data" onclick="clearData('descargas')">🗑️ Limpar Todas as Descargas</button>
+        <button onclick="reprocessarProdutos()" style="background:var(--blue);color:#fff;border:none;padding:7px 14px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;transition:all .2s" onmouseover="this.style.opacity='.82'" onmouseout="this.style.opacity='1'">🔄 Atualizar Produtos</button>
       </div>
       <div class="drop-zone" id="dz-descargas"
            ondragover="dzDrag(event,'descargas')" ondragleave="dzLeave('descargas')" ondrop="dzDrop(event,'descargas')">
@@ -655,6 +656,7 @@
         <div class="drop-text">Arraste o arquivo ou <strong>clique para selecionar</strong><br><br>Movimentação_-_Descargas.xlsx</div>
       </div>
       <div class="upload-status" id="status-descargas"></div>
+      <div id="status-reprod" style="font-size:11px;margin-top:6px;padding:6px 10px;border-radius:6px;display:none"></div>
       <div class="data-log" id="log-descargas"></div>
     </div>
     <!-- TRANSITO -->
@@ -1349,6 +1351,50 @@ function processTransitoFerro(rows) {
     added++;
   }
   if(added>0) saveDB('transitoFerro').catch(()=>{});
+}
+
+// ============================================================
+// REPROCESSAR PRODUTOS — varre descargas sem produto e vincula ao produtoMap
+// ============================================================
+async function reprocessarProdutos() {
+  const el = document.getElementById('status-reprod');
+  el.style.display = 'block';
+  el.style.background = 'rgba(26,58,107,.08)';
+  el.style.color = 'var(--text2)';
+  el.textContent = '⏳ Reprocessando produtos...';
+
+  let vinculados = 0, semMapa = 0, jaOk = 0;
+
+  // Mapa inverso: nome da filial → número (igual ao FILIAL_MAP invertido)
+  const FILIAL_REV = {'Sinop':1,'Nova Mutum':3,'Dourados':2,'Fueling':4,'Sidrolândia':6,'Balsas':8,'Rio Verde':10,'Rondonópolis':14};
+
+  db.descargas.forEach(d => {
+    if(d.produto) { jaOk++; return; } // já tem produto
+    // chave: número da filial + '_' + nf — mesmo padrão do produtoMap (vem do GEF nas Notas)
+    const fNum = typeof d.filial === 'number' ? d.filial : (FILIAL_REV[d.filial] || 1);
+    // Tenta a chave exata; se não achar, tenta sem filial (chave '0_nf') que alguns relatórios geram
+    const chave = fNum + '_' + d.nf;
+    const chave0 = '0_' + d.nf;
+    const prod = db.produtoMap[chave] || db.produtoMap[chave0];
+    if(prod) { d.produto = prod; vinculados++; }
+    else semMapa++;
+  });
+
+  if(vinculados > 0) {
+    await saveDB('descargas').catch(() => {});
+    el.style.background = 'rgba(22,163,74,.12)';
+    el.style.color = '#15803d';
+    el.textContent = `✅ ${vinculados} descarga(s) com produto atualizado. ${jaOk} já tinham produto. ${semMapa} sem correspondência nas Notas.`;
+    renderPage(currentPage);
+  } else if(semMapa > 0) {
+    el.style.background = 'rgba(220,38,38,.1)';
+    el.style.color = '#dc2626';
+    el.textContent = `⚠️ Nenhuma correspondência encontrada. ${semMapa} descarga(s) sem produto — importe o relatório de Notas Fiscais primeiro.`;
+  } else {
+    el.style.background = 'rgba(22,163,74,.12)';
+    el.style.color = '#15803d';
+    el.textContent = `✅ Todas as ${jaOk} descargas já possuem produto vinculado.`;
+  }
 }
 
 // ============================================================
